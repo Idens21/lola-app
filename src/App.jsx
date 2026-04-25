@@ -43,16 +43,6 @@ async function askLola(messages, systemPrompt) {
   const data = await response.json();
   return data.content?.[0]?.text || "...";
 }
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
-      system: systemPrompt,
-      messages,
-    }),
-  });
-  const data = await response.json();
-  return data.content?.[0]?.text || "...";
-}
 
 // ── SHARED UI ─────────────────────────────────────────────
 function Card({ children, style = {} }) {
