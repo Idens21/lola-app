@@ -32,9 +32,7 @@ const API_KEY = import.meta.env.VITE_ANTHROPIC_KEY;
 async function askLola(messages, systemPrompt) {
   const response = await fetch("/api/chat", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
       max_tokens: 1000,
