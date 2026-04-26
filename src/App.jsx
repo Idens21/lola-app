@@ -148,7 +148,6 @@ function IntakeFacts({ onDone, onSkip }) {
 <button onClick={onSkip} style={{ padding: "12px", borderRadius: 24, background: "transparent", border: `1px solid ${COLORS.roseBorder}`, color: COLORS.muted, fontSize: 13, cursor: "pointer", fontFamily: "inherit", marginBottom: 8, width: "100%" }}>
   → Sla intake over (testen)
 </button>
-      </button>
     </div>
   );
 }
