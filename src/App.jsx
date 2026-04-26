@@ -88,7 +88,7 @@ function NavBar({ active, onChange }) {
 }
 
 // ── INTAKE FASE 1: FEITEN FORMULIER ───────────────────────
-function IntakeFacts({ onDone }) {
+function IntakeFacts({ onDone, onSkip }) {
   const [form, setForm] = useState({ name: "", birthdate: "", birthtime: "", birthplace: "", lastperiod: "", cyclelength: "28–32 dagen", hdtype: "" });
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
 
@@ -145,8 +145,9 @@ function IntakeFacts({ onDone }) {
 <button onClick={() => { setProfile({ facts: { name: "Iris", hdtype: "Projector", cyclelength: "28–32 dagen", lastperiod: "2025-04-07" } }); setPhase("app"); }} style={{ padding: "12px", borderRadius: 24, background: "transparent", border: `1px solid ${COLORS.roseBorder}`, color: COLORS.muted, fontSize: 13, cursor: "pointer", fontFamily: "inherit", marginBottom: 8, width: "100%" }}>
   → Sla intake over (testen)
 </button>
-      <button onClick={() => form.name && onDone(form)} style={{ padding: "15px", borderRadius: 24, background: form.name ? COLORS.rose : COLORS.roseBorder, border: "none", color: COLORS.white, fontSize: 15, fontWeight: 500, cursor: form.name ? "pointer" : "default", fontFamily: "inherit" }}>
-        Verder met het gesprek →
+<button onClick={onSkip} style={{ padding: "12px", borderRadius: 24, background: "transparent", border: `1px solid ${COLORS.roseBorder}`, color: COLORS.muted, fontSize: 13, cursor: "pointer", fontFamily: "inherit", marginBottom: 8, width: "100%" }}>
+  → Sla intake over (testen)
+</button>
       </button>
     </div>
   );
@@ -682,7 +683,10 @@ export default function App() {
             <span style={{ fontSize: 16, color: COLORS.rose }}>✦</span>
             <span style={{ fontSize: 18, fontWeight: 600, color: COLORS.text, letterSpacing: "-0.02em" }}>lola</span>
           </div>
-          <IntakeFacts onDone={(facts) => { setProfile({ facts }); setPhase("chat"); }} />
+         <IntakeFacts 
+  onDone={(facts) => { setProfile({ facts }); setPhase("chat"); }} 
+  onSkip={() => { setProfile({ facts: { name: "Iris", hdtype: "Projector", cyclelength: "28–32 dagen", lastperiod: "2025-04-07" } }); setPhase("app"); }}
+/>
         </div>
       </div>
     );
