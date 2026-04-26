@@ -561,7 +561,7 @@ function FoodScreen() {
     setSearching(true);
     setResults([]);
     try {
-      const res = await fetch(`https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=8&fields=product_name,nutriments,brands`);
+const res = await fetch(`/api/food?query=${encodeURIComponent(query)}`);
       const data = await res.json();
       const products = (data.products || []).filter(p => p.product_name).map(p => ({
         name: p.product_name,
