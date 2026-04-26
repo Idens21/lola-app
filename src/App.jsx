@@ -543,29 +543,120 @@ Stel één vraag per keer. Reageer warm maar eerlijk. Durf te spiegelen. Houd be
 
 // ── FOOD SCREEN ───────────────────────────────────────────
 function FoodScreen() {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [meals, setMeals] = useState({ ontbijt: [], lunch: [], diner: [], snack: [] });
+  const [activeMeal, setActiveMeal] = useState("ontbijt");
+
+  const totals = Object.values(meals).flat().reduce(
+    (acc, p) => ({ kcal: acc.kcal + (p.kcal || 0), protein: acc.protein + (p.protein || 0), carbs: acc.carbs + (p.carbs || 0), fat: acc.fat + (p.fat || 0) }),
+    { kcal: 0, protein: 0, carbs: 0, fat: 0 }
+  );
+
+  async function search() {
+    if (!query.trim()) return;
+    setSearching(true);
+    setResults([]);
+    try {
+      const res = await fetch(`https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=8&fields=product_name,nutriments,brands`);
+      const data = await res.json();
+      const products = (data.products || []).filter(p => p.product_name).map(p => ({
+        name: p.product_name,
+        brand: p.brands || "",
+        kcal: Math.round(p.nutriments?.["energy-kcal_100g"] || 0),
+        protein: Math.round(p.nutriments?.proteins_100g || 0),
+        carbs: Math.round(p.nutriments?.carbohydrates_100g || 0),
+        fat: Math.round(p.nutriments?.fat_100g || 0),
+      }));
+      setResults(products);
+    } catch { setResults([]); }
+    setSearching(false);
+  }
+
+  function addProduct(product) {
+    setMeals(prev => ({ ...prev, [activeMeal]: [...prev[activeMeal], product] }));
+    setResults([]);
+    setQuery("");
+  }
+
+  function removeProduct(meal, index) {
+    setMeals(prev => ({ ...prev, [meal]: prev[meal].filter((_, i) => i !== index) }));
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div style={{ fontSize: 22, fontWeight: 500, color: COLORS.text }}>Voeding <span style={{ fontWeight: 300 }}>vandaag</span></div>
+
+      {/* Macro overzicht */}
       <div style={{ display: "flex", gap: 8 }}>
-        {[["1.240","kcal"],["68g","proteïne"],["142g","koolhyd."],["38g","vet"]].map(([val,lbl]) => (
+        {[["kcal", totals.kcal], ["proteïne", `${totals.protein}g`], ["koolhyd.", `${totals.carbs}g`], ["vet", `${totals.fat}g`]].map(([lbl, val]) => (
           <div key={lbl} style={{ flex: 1, background: COLORS.roseLight, borderRadius: 16, padding: "12px 8px", textAlign: "center", border: `0.5px solid ${COLORS.roseBorder}` }}>
             <div style={{ fontSize: 16, fontWeight: 500, color: COLORS.text }}>{val}</div>
             <div style={{ fontSize: 10, color: COLORS.muted, marginTop: 3 }}>{lbl}</div>
           </div>
         ))}
       </div>
-      <Card><Label>Ontbijt</Label>
-        {[["Griekse yoghurt + bessen","320 kcal"],["Havermout met honing","290 kcal"]].map(([name,cal]) => (
-          <div key={name} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: COLORS.text, padding: "6px 0", borderBottom: `0.5px solid ${COLORS.roseBorder}` }}>
-            <span>{name}</span><span style={{ color: COLORS.muted }}>{cal}</span>
-          </div>
+
+      {/* Maaltijd tabs */}
+      <div style={{ display: "flex", gap: 8 }}>
+        {["ontbijt", "lunch", "diner", "snack"].map(meal => (
+          <button key={meal} onClick={() => setActiveMeal(meal)} style={{ flex: 1, padding: "8px 4px", borderRadius: 16, border: `1.5px solid ${activeMeal === meal ? COLORS.rose : COLORS.roseBorder}`, background: activeMeal === meal ? COLORS.roseLight : COLORS.white, color: activeMeal === meal ? COLORS.rose : COLORS.muted, fontSize: 11, fontWeight: activeMeal === meal ? 500 : 400, cursor: "pointer", fontFamily: "inherit", textTransform: "capitalize" }}>
+            {meal}
+          </button>
         ))}
-      </Card>
-      <Card><Label>Lunch</Label>
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: COLORS.text }}>
-          <span>Kip salade</span><span style={{ color: COLORS.muted }}>410 kcal</span>
-        </div>
-      </Card>
+      </div>
+
+      {/* Zoekbalk */}
+      <div style={{ display: "flex", gap: 8 }}>
+        <input
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && search()}
+          placeholder={`Zoek product voor ${activeMeal}...`}
+          style={{ flex: 1, padding: "12px 16px", borderRadius: 20, border: `1px solid ${COLORS.roseBorder}`, background: COLORS.white, color: COLORS.text, fontSize: 13, fontFamily: "inherit", outline: "none" }}
+        />
+        <button onClick={search} style={{ padding: "12px 20px", borderRadius: 20, background: COLORS.rose, border: "none", color: COLORS.white, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
+          {searching ? "..." : "Zoek"}
+        </button>
+      </div>
+
+      {/* Zoekresultaten */}
+      {results.length > 0 && (
+        <Card>
+          <Label>Resultaten — klik om toe te voegen</Label>
+          {results.map((p, i) => (
+            <div key={i} onClick={() => addProduct(p)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `0.5px solid ${COLORS.roseBorder}`, cursor: "pointer" }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.text }}>{p.name}</div>
+                <div style={{ fontSize: 11, color: COLORS.muted }}>{p.brand} · per 100g</div>
+              </div>
+              <div style={{ fontSize: 12, color: COLORS.rose, fontWeight: 500 }}>{p.kcal} kcal</div>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {/* Gelogde maaltijden */}
+      {["ontbijt", "lunch", "diner", "snack"].map(meal => meals[meal].length > 0 && (
+        <Card key={meal}>
+          <Label>{meal}</Label>
+          {meals[meal].map((p, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `0.5px solid ${COLORS.roseBorder}` }}>
+              <div>
+                <div style={{ fontSize: 13, color: COLORS.text }}>{p.name}</div>
+                <div style={{ fontSize: 11, color: COLORS.muted }}>{p.protein}g eiwit · {p.carbs}g koolh · {p.fat}g vet</div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 12, color: COLORS.rose, fontWeight: 500 }}>{p.kcal} kcal</span>
+                <button onClick={() => removeProduct(meal, i)} style={{ background: "none", border: "none", color: COLORS.muted, cursor: "pointer", fontSize: 16, padding: 0 }}>×</button>
+              </div>
+            </div>
+          ))}
+        </Card>
+      ))}
+
+      {/* Lola tip */}
       <Card style={{ background: COLORS.roseLight, border: `0.5px solid ${COLORS.roseBorder}` }}>
         <div style={{ fontSize: 11, color: COLORS.rose, fontWeight: 500, marginBottom: 4 }}>✦ Lola tip</div>
         <div style={{ fontSize: 13, color: COLORS.text, lineHeight: 1.6 }}>In je luteale fase heeft je lichaam meer magnesium nodig. Denk aan donkere chocolade of pompoenpitten vanavond.</div>
