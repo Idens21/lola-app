@@ -142,7 +142,9 @@ function IntakeFacts({ onDone }) {
           {["Korter dan 25 dagen", "25–28 dagen", "28–32 dagen", "Langer dan 32 dagen", "Onregelmatig"].map((o) => <option key={o}>{o}</option>)}
         </select>
       </div>
-
+<button onClick={() => { setProfile({ facts: { name: "Iris", hdtype: "Projector", cyclelength: "28–32 dagen", lastperiod: "2025-04-07" } }); setPhase("app"); }} style={{ padding: "12px", borderRadius: 24, background: "transparent", border: `1px solid ${COLORS.roseBorder}`, color: COLORS.muted, fontSize: 13, cursor: "pointer", fontFamily: "inherit", marginBottom: 8, width: "100%" }}>
+  → Sla intake over (testen)
+</button>
       <button onClick={() => form.name && onDone(form)} style={{ padding: "15px", borderRadius: 24, background: form.name ? COLORS.rose : COLORS.roseBorder, border: "none", color: COLORS.white, fontSize: 15, fontWeight: 500, cursor: form.name ? "pointer" : "default", fontFamily: "inherit" }}>
         Verder met het gesprek →
       </button>
