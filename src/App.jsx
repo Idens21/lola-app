@@ -770,8 +770,21 @@ export default function App() {
             <span style={{ fontSize: 16, color: COLORS.rose }}>✦</span>
             <span style={{ fontSize: 18, fontWeight: 600, color: COLORS.text, letterSpacing: "-0.02em" }}>lola</span>
           </div>
-         <IntakeFacts 
-  onDone={(facts) => { setProfile({ facts }); setPhase("chat"); }} 
+<IntakeFacts onDone={async (facts) => {
+  const { error } = await supabase.from("profiles").upsert({
+    id: user.id,
+    name: facts.name,
+    birthdate: facts.birthdate,
+    birthtime: facts.birthtime,
+    birthplace: facts.birthplace,
+    hdtype: facts.hdtype,
+    cyclelength: facts.cyclelength,
+    lastperiod: facts.lastperiod,
+  });
+  if (error) console.error(error);
+  setProfile({ facts });
+  setPhase("chat");
+}}
   onSkip={() => { setProfile({ facts: { name: "Iris", hdtype: "Projector", cyclelength: "28–32 dagen", lastperiod: "2025-04-07" } }); setPhase("app"); }}
 />
         </div>
