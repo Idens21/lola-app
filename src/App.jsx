@@ -747,6 +747,20 @@ export default function App() {
   const [screen, setScreen] = useState("home");
   const [user, setUser] = useState(null);
 
+  if (phase === "auth") {
+    return (
+      <div style={{ minHeight: "100vh", background: COLORS.cream, fontFamily: "'DM Sans','Helvetica Neue',sans-serif" }}>
+        <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+        <div style={{ maxWidth: 480, margin: "0 auto", padding: "40px 20px 60px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 40 }}>
+            <span style={{ fontSize: 16, color: COLORS.rose }}>✦</span>
+            <span style={{ fontSize: 18, fontWeight: 600, color: COLORS.text, letterSpacing: "-0.02em" }}>lola</span>
+          </div>
+          <AuthScreen onAuth={(u) => { setUser(u); setPhase("facts"); }} />
+        </div>
+      </div>
+    );
+  }
   if (phase === "facts") {
     return (
       <div style={{ minHeight: "100vh", background: COLORS.cream, fontFamily: "'DM Sans','Helvetica Neue',sans-serif" }}>
