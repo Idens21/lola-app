@@ -785,7 +785,12 @@ export default function App() {
   setProfile({ facts });
   setPhase("chat");
 }}
-  onSkip={() => { setProfile({ facts: { name: "Iris", hdtype: "Projector", cyclelength: "28–32 dagen", lastperiod: "2025-04-07" } }); setPhase("app"); }}
+onSkip={async () => {
+  const facts = { name: "Iris", hdtype: "Projector", cyclelength: "28–32 dagen", lastperiod: "2025-04-07" };
+  await supabase.from("profiles").upsert({ id: user.id, ...facts });
+  setProfile({ facts });
+  setPhase("app");
+}}
 />
         </div>
       </div>
