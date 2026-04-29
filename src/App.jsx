@@ -33,6 +33,73 @@ const WAKE_LABELS = ["Zwaar", "Moeizaam", "Oké", "Fris", "Uitgerust"];
 const DAILY_THOUGHT = "Wat als de vermoeidheid die je voelt geen zwakte is, maar een signaal dat je iets nodig hebt wat je jezelf nog niet gegund hebt?";
 
 const API_KEY = import.meta.env.VITE_ANTHROPIC_KEY;
+// ── AUTH SCREEN ───────────────────────────────────────────
+function AuthScreen({ onAuth }) {
+  const [mode, setMode] = useState("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const inputStyle = {
+    width: "100%", padding: "12px 16px", borderRadius: 16,
+    border: `1.5px solid ${COLORS.roseBorder}`, background: COLORS.white,
+    color: COLORS.text, fontSize: 14, fontFamily: "inherit",
+    outline: "none", boxSizing: "border-box", marginTop: 6,
+  };
+
+  async function handleAuth() {
+    setLoading(true);
+    setError("");
+    setSuccess("");
+    if (mode === "register") {
+      const { error } = await supabase.auth.signUp({ email, password });
+      if (error) setError(error.message);
+      else setSuccess("Check je e-mail voor een bevestigingslink!");
+    } else {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) setError(error.message);
+      else onAuth(data.user);
+    }
+    setLoading(false);
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+      <div style={{ marginBottom: 32 }}>
+        <div style={{ fontSize: 36, color: COLORS.rose, marginBottom: 12 }}>✦</div>
+        <h2 style={{ fontSize: 28, fontWeight: 500, color: COLORS.text, marginBottom: 8, letterSpacing: "-0.02em" }}>
+          {mode === "login" ? "Welkom terug." : "Begin hier."}
+        </h2>
+        <p style={{ fontSize: 14, color: COLORS.muted, lineHeight: 1.7 }}>
+          {mode === "login" ? "Log in om verder te gaan met Lola." : "Maak een account aan voor jouw persoonlijke Lola."}
+        </p>
+      </div>
+
+      <div style={{ marginBottom: 18 }}>
+        <label style={{ fontSize: 13, fontWeight: 500, color: COLORS.text }}>E-mailadres</label>
+        <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="jouw@email.com" style={inputStyle} />
+      </div>
+
+      <div style={{ marginBottom: 24 }}>
+        <label style={{ fontSize: 13, fontWeight: 500, color: COLORS.text }}>Wachtwoord</label>
+        <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Minimaal 6 tekens" style={inputStyle} onKeyDown={e => e.key === "Enter" && handleAuth()} />
+      </div>
+
+      {error && <div style={{ background: "#FEE8E8", border: "1px solid #F4ABAB", borderRadius: 12, padding: "10px 14px", fontSize: 13, color: "#C0392B", marginBottom: 16 }}>{error}</div>}
+      {success && <div style={{ background: COLORS.softGreen, border: `1px solid ${COLORS.softGreenBorder}`, borderRadius: 12, padding: "10px 14px", fontSize: 13, color: "#2D7A4F", marginBottom: 16 }}>{success}</div>}
+
+      <button onClick={handleAuth} disabled={loading} style={{ padding: "15px", borderRadius: 24, background: loading ? COLORS.roseBorder : COLORS.rose, border: "none", color: COLORS.white, fontSize: 15, fontWeight: 500, cursor: loading ? "default" : "pointer", fontFamily: "inherit", marginBottom: 12 }}>
+        {loading ? "..." : mode === "login" ? "Inloggen →" : "Account aanmaken →"}
+      </button>
+
+      <button onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); setSuccess(""); }} style={{ padding: "12px", borderRadius: 24, background: "transparent", border: `1px solid ${COLORS.roseBorder}`, color: COLORS.muted, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
+        {mode === "login" ? "Nog geen account? Registreer hier" : "Al een account? Log in"}
+      </button>
+    </div>
+  );
+}
 
 // ── AI HELPER ─────────────────────────────────────────────
 async function askLola(messages, systemPrompt) {
