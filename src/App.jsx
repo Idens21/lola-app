@@ -467,7 +467,7 @@ function HomeScreen({ profile, onCheckin }) {
 }
 
 // ── CHECK-IN SCREEN ───────────────────────────────────────
-function CheckInScreen({ onDone }) {
+function CheckInScreen({ onDone, user }) {
   const [wakeMood, setWakeMood] = useState(null);
   const [energy, setEnergy] = useState(null);
   const [slept, setSlept] = useState("");
@@ -541,7 +541,20 @@ function CheckInScreen({ onDone }) {
         <Label>Iets wat je wilt kwijt aan Lola?</Label>
         <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optioneel..." rows={2} style={{ width: "100%", border: `1px solid ${COLORS.roseBorder}`, borderRadius: 14, padding: "12px 14px", fontSize: 13, fontFamily: "inherit", color: COLORS.text, background: COLORS.white, resize: "none", outline: "none", boxSizing: "border-box", lineHeight: 1.6 }} />
       </Card>
-      <button onClick={() => setSubmitted(true)} style={{ padding: "15px", borderRadius: 24, background: COLORS.rose, border: "none", color: COLORS.white, fontSize: 15, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
+    <button onClick={async () => {
+  if (user) {
+    await supabase.from("checkins").insert({
+      user_id: user.id,
+      type: "ochtend",
+      wake_mood: wakeMood,
+      energy,
+      slept,
+      intention,
+      note,
+    });
+  }
+  setSubmitted(true);
+}} style={{ padding: "15px", borderRadius: 24, background: COLORS.rose, border: "none", color: COLORS.white, fontSize: 15, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
         Verstuur naar Lola ✦
       </button>
     </div>
@@ -839,7 +852,7 @@ onSkip={async () => {
 
   const screenMap = {
     home: <HomeScreen profile={profile} onCheckin={() => setScreen("checkin")} />,
-    checkin: <CheckInScreen onDone={() => setScreen("home")} />,
+checkin: <CheckInScreen user={user} onDone={() => setScreen("home")} />,
     food: <FoodScreen />,
     lola: <LolaScreen profile={profile} />,
   };
