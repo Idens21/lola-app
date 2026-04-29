@@ -747,6 +747,22 @@ export default function App() {
   const [screen, setScreen] = useState("home");
   const [user, setUser] = useState(null);
 
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUser(session.user);
+        supabase.from("profiles").select("*").eq("id", session.user.id).single().then(({ data }) => {
+          if (data) {
+            setProfile({ facts: data });
+            setPhase("app");
+          } else {
+            setPhase("facts");
+          }
+        });
+      }
+    });
+  }, []);
+
   if (phase === "auth") {
     return (
       <div style={{ minHeight: "100vh", background: COLORS.cream, fontFamily: "'DM Sans','Helvetica Neue',sans-serif" }}>
