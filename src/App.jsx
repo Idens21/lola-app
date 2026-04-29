@@ -742,9 +742,10 @@ const res = await fetch(`/api/food?query=${encodeURIComponent(query)}`);
 
 // ── MAIN APP ──────────────────────────────────────────────
 export default function App() {
-  const [phase, setPhase] = useState("facts");
+  const [phase, setPhase] = useState("auth");
   const [profile, setProfile] = useState(null);
   const [screen, setScreen] = useState("home");
+  const [user, setUser] = useState(null);
 
   if (phase === "facts") {
     return (
