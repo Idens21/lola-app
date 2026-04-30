@@ -784,9 +784,9 @@ function FoodScreen({ user }) {
         <button onClick={search} style={{ padding: "12px 16px", borderRadius: 20, background: COLORS.rose, border: "none", color: COLORS.white, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
           {searching ? "..." : "Zoek"}
         </button>
-        <button onClick={scanning ? stopScanner : startScanner} style={{ padding: "12px 16px", borderRadius: 20, background: scanning ? COLORS.roseDark : COLORS.roseLight, border: `1px solid ${COLORS.roseBorder}`, color: scanning ? COLORS.white : COLORS.rose, fontSize: 16, cursor: "pointer" }}>
-          📷
-        </button>
+<button onClick={scanning ? stopScanner : startScanner} style={{ padding: "12px 16px", borderRadius: 20, background: scanning ? COLORS.roseDark : COLORS.roseLight, border: `1px solid ${COLORS.roseBorder}`, color: scanning ? COLORS.white : COLORS.rose, fontSize: 16, cursor: "pointer" }}>
+  📷
+</button>
       </div>
 
       {scanning && (
