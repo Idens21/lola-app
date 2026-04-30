@@ -886,6 +886,12 @@ export default function App() {
     return (
       <div style={{ minHeight: "100vh", background: COLORS.cream, fontFamily: "'DM Sans','Helvetica Neue',sans-serif" }}>
         <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+        <style>{`
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { overflow-x: hidden; }
+  input, button, textarea, select { max-width: 100%; font-family: inherit; }
+  ::-webkit-scrollbar { display: none; }
+`}</style>
         <div style={{ maxWidth: 480, margin: "0 auto", padding: "40px 20px 60px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 40 }}>
             <span style={{ fontSize: 16, color: COLORS.rose }}>✦</span>
@@ -900,6 +906,12 @@ export default function App() {
     return (
       <div style={{ minHeight: "100vh", background: COLORS.cream, fontFamily: "'DM Sans','Helvetica Neue',sans-serif" }}>
         <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+        <style>{`
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { overflow-x: hidden; }
+  input, button, textarea, select { max-width: 100%; font-family: inherit; }
+  ::-webkit-scrollbar { display: none; }
+`}</style>
         <div style={{ maxWidth: 480, margin: "0 auto", padding: "40px 20px 60px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 40 }}>
             <span style={{ fontSize: 16, color: COLORS.rose }}>✦</span>
@@ -936,6 +948,18 @@ onSkip={async () => {
     return (
       <div style={{ minHeight: "100vh", background: COLORS.cream, fontFamily: "'DM Sans','Helvetica Neue',sans-serif" }}>
         <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+        <style>{`
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { overflow-x: hidden; }
+  input, button, textarea, select { max-width: 100%; font-family: inherit; }
+  ::-webkit-scrollbar { display: none; }
+`}</style>
+        <style>{`
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { overflow-x: hidden; }
+  input, button, textarea, select { max-width: 100%; font-family: inherit; }
+  ::-webkit-scrollbar { display: none; }
+`}</style>
         <div style={{ maxWidth: 480, margin: "0 auto", padding: "40px 20px 60px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 24 }}>
             <span style={{ fontSize: 16, color: COLORS.rose }}>✦</span>
@@ -951,6 +975,18 @@ onSkip={async () => {
     return (
       <div style={{ minHeight: "100vh", background: COLORS.cream, fontFamily: "'DM Sans','Helvetica Neue',sans-serif" }}>
         <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+        <style>{`
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { overflow-x: hidden; }
+  input, button, textarea, select { max-width: 100%; font-family: inherit; }
+  ::-webkit-scrollbar { display: none; }
+`}</style>
+        <style>{`
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { overflow-x: hidden; }
+  input, button, textarea, select { max-width: 100%; font-family: inherit; }
+  ::-webkit-scrollbar { display: none; }
+`}</style>
         <WelcomeScreen profile={profile} onStart={() => setPhase("app")} />
       </div>
     );
@@ -966,6 +1002,12 @@ food: <FoodScreen user={user} />,
   return (
     <div style={{ minHeight: "100vh", background: COLORS.cream, fontFamily: "'DM Sans','Helvetica Neue',sans-serif" }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+      <style>{`
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { overflow-x: hidden; }
+  input, button, textarea, select { max-width: 100%; font-family: inherit; }
+  ::-webkit-scrollbar { display: none; }
+`}</style>
       <div style={{ maxWidth: 480, margin: "0 auto", padding: "40px 20px 100px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 28 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
