@@ -149,7 +149,7 @@ function NavBar({ active, onChange }) {
     { id: "lola", label: "Lola", icon: <svg viewBox="0 0 22 22" fill="none"><path d="M11 4l1.5 4.5H17l-3.8 2.8 1.5 4.5L11 13l-3.7 2.8 1.5-4.5L5 8.5h4.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg> },
   ];
   return (
-    <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: COLORS.cream, borderTop: `0.5px solid ${COLORS.roseBorder}`, display: "flex", justifyContent: "space-around", padding: "10px 0 20px", zIndex: 100 }}>
+    <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: COLORS.cream, borderTop: `0.5px solid ${COLORS.roseBorder}`, display: "flex", justifyContent: "space-around", padding: "10px 0 env(safe-area-inset-bottom, 20px)", zIndex: 100 }}>
       {items.map((item) => (
         <button key={item.id} onClick={() => onChange(item.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", color: active === item.id ? COLORS.rose : COLORS.muted, fontFamily: "inherit", fontSize: 10, fontWeight: active === item.id ? 500 : 400 }}>
           <div style={{ width: 22, height: 22 }}>{item.icon}</div>
@@ -892,7 +892,7 @@ export default function App() {
   input, button, textarea, select { max-width: 100%; font-family: inherit; }
   ::-webkit-scrollbar { display: none; }
 `}</style>
-        <div style={{ maxWidth: 480, margin: "0 auto", padding: "40px 20px 60px" }}>
+        <div style={{ maxWidth: 480, margin: "0 auto", width: "100%", padding: "40px 20px 60px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 40 }}>
             <span style={{ fontSize: 16, color: COLORS.rose }}>✦</span>
             <span style={{ fontSize: 18, fontWeight: 600, color: COLORS.text, letterSpacing: "-0.02em" }}>lola</span>
@@ -912,7 +912,7 @@ export default function App() {
   input, button, textarea, select { max-width: 100%; font-family: inherit; }
   ::-webkit-scrollbar { display: none; }
 `}</style>
-        <div style={{ maxWidth: 480, margin: "0 auto", padding: "40px 20px 60px" }}>
+        <div style={{ maxWidth: 480, margin: "0 auto", width: "100%", padding: "40px 20px 60px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 40 }}>
             <span style={{ fontSize: 16, color: COLORS.rose }}>✦</span>
             <span style={{ fontSize: 18, fontWeight: 600, color: COLORS.text, letterSpacing: "-0.02em" }}>lola</span>
@@ -960,7 +960,7 @@ onSkip={async () => {
   input, button, textarea, select { max-width: 100%; font-family: inherit; }
   ::-webkit-scrollbar { display: none; }
 `}</style>
-        <div style={{ maxWidth: 480, margin: "0 auto", padding: "40px 20px 60px" }}>
+        <div style={{ maxWidth: 480, margin: "0 auto", width: "100%", padding: "40px 20px 60px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 24 }}>
             <span style={{ fontSize: 16, color: COLORS.rose }}>✦</span>
             <span style={{ fontSize: 18, fontWeight: 600, color: COLORS.text, letterSpacing: "-0.02em" }}>lola</span>
@@ -1008,7 +1008,7 @@ food: <FoodScreen user={user} />,
   input, button, textarea, select { max-width: 100%; font-family: inherit; }
   ::-webkit-scrollbar { display: none; }
 `}</style>
-      <div style={{ maxWidth: 480, margin: "0 auto", padding: "40px 20px 100px" }}>
+      <div style={{ maxWidth: 480, margin: "0 auto", width: "100%", padding: "40px 20px 100px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 28 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ fontSize: 16, color: COLORS.rose }}>✦</span>
