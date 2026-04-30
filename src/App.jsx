@@ -591,7 +591,7 @@ Stel één vraag per keer. Reageer warm maar eerlijk. Durf te spiegelen. Houd be
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 140px)" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 140px)", width: "100%", maxWidth: "100%", overflowX: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
         <div style={{ width: 40, height: 40, borderRadius: "50%", background: COLORS.roseLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, border: `1px solid ${COLORS.roseBorder}` }}>✦</div>
         <div>
@@ -603,7 +603,7 @@ Stel één vraag per keer. Reageer warm maar eerlijk. Durf te spiegelen. Houd be
         {messages.map((msg, i) => (
           <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: msg.from === "user" ? "flex-end" : "flex-start" }}>
             {msg.from === "lola" && <div style={{ fontSize: 10, color: COLORS.muted, marginBottom: 3, fontWeight: 500 }}>Lola</div>}
-            <div style={{ maxWidth: "80%", padding: "11px 15px", borderRadius: 18, fontSize: 13, lineHeight: 1.6, background: msg.from === "lola" ? COLORS.roseLight : COLORS.rose, color: msg.from === "lola" ? COLORS.text : COLORS.white, borderBottomLeftRadius: msg.from === "lola" ? 4 : 18, borderBottomRightRadius: msg.from === "user" ? 4 : 18, border: msg.from === "lola" ? `0.5px solid ${COLORS.roseBorder}` : "none" }}>
+            <div style={{ maxWidth: "75%", wordBreak: "break-word", padding: "11px 15px", borderRadius: 18, fontSize: 13, lineHeight: 1.6, background: msg.from === "lola" ? COLORS.roseLight : COLORS.rose, color: msg.from === "lola" ? COLORS.text : COLORS.white, borderBottomLeftRadius: msg.from === "lola" ? 4 : 18, borderBottomRightRadius: msg.from === "user" ? 4 : 18, border: msg.from === "lola" ? `0.5px solid ${COLORS.roseBorder}` : "none" }}>
               {msg.text}
             </div>
           </div>
