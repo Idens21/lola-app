@@ -569,35 +569,12 @@ function LolaScreen({ profile }) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef(null);
-  const [todayData, setTodayData] = useState(null);
 
-useEffect(() => {
-  async function loadTodayData() {
-    if (!user) return;
-    const today = new Date().toISOString().split("T")[0];
-    const [checkins, food] = await Promise.all([
-      supabase.from("checkins").select("*").eq("user_id", user.id).gte("created_at", today).order("created_at"),
-      supabase.from("food_logs").select("*").eq("user_id", user.id).gte("created_at", today)
-    ]);
-    setTodayData({
-      checkins: checkins.data || [],
-      food: food.data || [],
-      totalKcal: (food.data || []).reduce((sum, f) => sum + (f.kcal || 0), 0),
-      totalProtein: (food.data || []).reduce((sum, f) => sum + (f.protein || 0), 0),
-    });
-  }
-  loadTodayData();
-}, [user]);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
 const LOLA_SYSTEM = `Je bent Lola, een warme maar eerlijke persoonlijke levenscoach. Je kent deze persoon goed vanuit de intake.
 Naam: ${profile?.facts?.name}. Human design: ${profile?.facts?.hdtype || "onbekend"}. Cyclus: ${profile?.facts?.cyclelength}.
-
-Wat je weet over vandaag:
-${todayData?.checkins?.length > 0 ? `- Ochtend check-in: energie ${todayData.checkins[0]?.energy}/5, slaap: ${todayData.checkins[0]?.slept}, intentie: "${todayData.checkins[0]?.intention || "niet ingevuld"}"` : "- Nog geen check-in vandaag"}
-${todayData?.totalKcal > 0 ? `- Voeding: ${todayData.totalKcal} kcal gegeten, ${todayData.totalProtein}g proteïne` : "- Nog geen voeding gelogd vandaag"}
-
 Je bent altijd beschikbaar — voor grote levensvragen én kleine dagelijkse dingen. Over relaties, werk, familie, twijfels, vreugde — alles.
 Stel één vraag per keer. Reageer warm maar eerlijk. Durf te spiegelen. Houd berichten kort. Schrijf in het Nederlands.`;
 
