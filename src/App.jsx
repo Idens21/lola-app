@@ -636,33 +636,107 @@ function FoodScreen({ user }) {
   const [searching, setSearching] = useState(false);
   const [meals, setMeals] = useState({ ontbijt: [], lunch: [], diner: [], snack: [] });
   const [activeMeal, setActiveMeal] = useState("ontbijt");
+  const [showManual, setShowManual] = useState(false);
+  const [manualName, setManualName] = useState("");
+  const [manualKcal, setManualKcal] = useState("");
+  const [manualProtein, setManualProtein] = useState("");
+  const [manualCarbs, setManualCarbs] = useState("");
+  const [manualFat, setManualFat] = useState("");
+  const [scanning, setScanning] = useState(false);
+  const videoRef = useRef(null);
+  const scannerRef = useRef(null);
 
   const totals = Object.values(meals).flat().reduce(
     (acc, p) => ({ kcal: acc.kcal + (p.kcal || 0), protein: acc.protein + (p.protein || 0), carbs: acc.carbs + (p.carbs || 0), fat: acc.fat + (p.fat || 0) }),
     { kcal: 0, protein: 0, carbs: 0, fat: 0 }
   );
 
+  async function searchOFF(q) {
+    const res = await fetch(`/api/food?query=${encodeURIComponent(q)}`);
+    const data = await res.json();
+    return (data.products || []).filter(p => p.product_name).map(p => ({
+      name: p.product_name,
+      brand: p.brands || "",
+      kcal: Math.round(p.nutriments?.["energy-kcal_100g"] || 0),
+      protein: Math.round(p.nutriments?.proteins_100g || 0),
+      carbs: Math.round(p.nutriments?.carbohydrates_100g || 0),
+      fat: Math.round(p.nutriments?.fat_100g || 0),
+      source: "OFF"
+    }));
+  }
+
+  async function searchUSDA(q) {
+    try {
+      const res = await fetch(`https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(q)}&pageSize=6&api_key=${import.meta.env.VITE_USDA_KEY}`);
+      const data = await res.json();
+      return (data.foods || []).map(f => {
+        const get = (name) => Math.round(f.foodNutrients?.find(n => n.nutrientName === name)?.value || 0);
+        return {
+          name: f.description,
+          brand: f.brandOwner || "",
+          kcal: get("Energy"),
+          protein: get("Protein"),
+          carbs: get("Carbohydrate, by difference"),
+          fat: get("Total lipid (fat)"),
+          source: "USDA"
+        };
+      });
+    } catch { return []; }
+  }
+
   async function search() {
     if (!query.trim()) return;
     setSearching(true);
     setResults([]);
-    try {
-const res = await fetch(`/api/food?query=${encodeURIComponent(query)}`);
-      const data = await res.json();
-      const products = (data.products || []).filter(p => p.product_name).map(p => ({
-        name: p.product_name,
-        brand: p.brands || "",
-        kcal: Math.round(p.nutriments?.["energy-kcal_100g"] || 0),
-        protein: Math.round(p.nutriments?.proteins_100g || 0),
-        carbs: Math.round(p.nutriments?.carbohydrates_100g || 0),
-        fat: Math.round(p.nutriments?.fat_100g || 0),
-      }));
-      setResults(products);
-    } catch { setResults([]); }
+    const [off, usda] = await Promise.all([searchOFF(query), searchUSDA(query)]);
+    const combined = [...off, ...usda].filter(p => p.name);
+    setResults(combined.slice(0, 12));
     setSearching(false);
   }
 
-async function addProduct(product) {
+  async function searchBarcode(barcode) {
+    try {
+      const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
+      const data = await res.json();
+      if (data.status === 1 && data.product) {
+        const p = data.product;
+        return {
+          name: p.product_name || "Onbekend product",
+          brand: p.brands || "",
+          kcal: Math.round(p.nutriments?.["energy-kcal_100g"] || 0),
+          protein: Math.round(p.nutriments?.proteins_100g || 0),
+          carbs: Math.round(p.nutriments?.carbohydrates_100g || 0),
+          fat: Math.round(p.nutriments?.fat_100g || 0),
+        };
+      }
+    } catch {}
+    return null;
+  }
+
+  async function startScanner() {
+    setScanning(true);
+    const { BrowserMultiFormatReader } = await import("@zxing/browser");
+    const reader = new BrowserMultiFormatReader();
+    scannerRef.current = reader;
+    try {
+      await reader.decodeFromVideoDevice(undefined, videoRef.current, async (result) => {
+        if (result) {
+          reader.reset();
+          setScanning(false);
+          const product = await searchBarcode(result.getText());
+          if (product) addProduct(product);
+          else alert("Product niet gevonden — voeg het handmatig toe.");
+        }
+      });
+    } catch { setScanning(false); }
+  }
+
+  function stopScanner() {
+    scannerRef.current?.reset();
+    setScanning(false);
+  }
+
+  async function addProduct(product) {
     setMeals(prev => ({ ...prev, [activeMeal]: [...prev[activeMeal], product] }));
     setResults([]);
     setQuery("");
@@ -687,7 +761,6 @@ async function addProduct(product) {
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div style={{ fontSize: 22, fontWeight: 500, color: COLORS.text }}>Voeding <span style={{ fontWeight: 300 }}>vandaag</span></div>
 
-      {/* Macro overzicht */}
       <div style={{ display: "flex", gap: 8 }}>
         {[["kcal", totals.kcal], ["proteïne", `${totals.protein}g`], ["koolhyd.", `${totals.carbs}g`], ["vet", `${totals.fat}g`]].map(([lbl, val]) => (
           <div key={lbl} style={{ flex: 1, background: COLORS.roseLight, borderRadius: 16, padding: "12px 8px", textAlign: "center", border: `0.5px solid ${COLORS.roseBorder}` }}>
@@ -697,7 +770,6 @@ async function addProduct(product) {
         ))}
       </div>
 
-      {/* Maaltijd tabs */}
       <div style={{ display: "flex", gap: 8 }}>
         {["ontbijt", "lunch", "diner", "snack"].map(meal => (
           <button key={meal} onClick={() => setActiveMeal(meal)} style={{ flex: 1, padding: "8px 4px", borderRadius: 16, border: `1.5px solid ${activeMeal === meal ? COLORS.rose : COLORS.roseBorder}`, background: activeMeal === meal ? COLORS.roseLight : COLORS.white, color: activeMeal === meal ? COLORS.rose : COLORS.muted, fontSize: 11, fontWeight: activeMeal === meal ? 500 : 400, cursor: "pointer", fontFamily: "inherit", textTransform: "capitalize" }}>
@@ -706,21 +778,24 @@ async function addProduct(product) {
         ))}
       </div>
 
-      {/* Zoekbalk */}
       <div style={{ display: "flex", gap: 8 }}>
-        <input
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && search()}
-          placeholder={`Zoek product voor ${activeMeal}...`}
-          style={{ flex: 1, padding: "12px 16px", borderRadius: 20, border: `1px solid ${COLORS.roseBorder}`, background: COLORS.white, color: COLORS.text, fontSize: 13, fontFamily: "inherit", outline: "none" }}
-        />
-        <button onClick={search} style={{ padding: "12px 20px", borderRadius: 20, background: COLORS.rose, border: "none", color: COLORS.white, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
+        <input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === "Enter" && search()} placeholder={`Zoek voor ${activeMeal}...`} style={{ flex: 1, padding: "12px 16px", borderRadius: 20, border: `1px solid ${COLORS.roseBorder}`, background: COLORS.white, color: COLORS.text, fontSize: 13, fontFamily: "inherit", outline: "none" }} />
+        <button onClick={search} style={{ padding: "12px 16px", borderRadius: 20, background: COLORS.rose, border: "none", color: COLORS.white, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
           {searching ? "..." : "Zoek"}
+        </button>
+        <button onClick={scanning ? stopScanner : startScanner} style={{ padding: "12px 16px", borderRadius: 20, background: scanning ? COLORS.roseDark : COLORS.roseLight, border: `1px solid ${COLORS.roseBorder}`, color: scanning ? COLORS.white : COLORS.rose, fontSize: 16, cursor: "pointer" }}>
+          📷
         </button>
       </div>
 
-      {/* Zoekresultaten */}
+      {scanning && (
+        <Card>
+          <Label>Richt je camera op de barcode</Label>
+          <video ref={videoRef} style={{ width: "100%", borderRadius: 12 }} />
+          <button onClick={stopScanner} style={{ marginTop: 10, width: "100%", padding: "10px", borderRadius: 16, background: "transparent", border: `1px solid ${COLORS.roseBorder}`, color: COLORS.muted, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Annuleren</button>
+        </Card>
+      )}
+
       {results.length > 0 && (
         <Card>
           <Label>Resultaten — klik om toe te voegen</Label>
@@ -728,7 +803,7 @@ async function addProduct(product) {
             <div key={i} onClick={() => addProduct(p)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `0.5px solid ${COLORS.roseBorder}`, cursor: "pointer" }}>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.text }}>{p.name}</div>
-                <div style={{ fontSize: 11, color: COLORS.muted }}>{p.brand} · per 100g</div>
+                <div style={{ fontSize: 11, color: COLORS.muted }}>{p.brand} · per 100g · {p.source}</div>
               </div>
               <div style={{ fontSize: 12, color: COLORS.rose, fontWeight: 500 }}>{p.kcal} kcal</div>
             </div>
@@ -736,7 +811,24 @@ async function addProduct(product) {
         </Card>
       )}
 
-      {/* Gelogde maaltijden */}
+      {showManual && (
+        <Card>
+          <Label>Zelf toevoegen</Label>
+          <input placeholder="Productnaam" value={manualName} onChange={e => setManualName(e.target.value)} style={{ width: "100%", padding: "10px 14px", borderRadius: 14, border: `1px solid ${COLORS.roseBorder}`, fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 8 }} />
+          <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+            {[["kcal", manualKcal, setManualKcal], ["eiwit g", manualProtein, setManualProtein], ["koolhyd g", manualCarbs, setManualCarbs], ["vet g", manualFat, setManualFat]].map(([lbl, val, setter]) => (
+              <div key={lbl} style={{ flex: 1 }}>
+                <div style={{ fontSize: 10, color: COLORS.muted, marginBottom: 4 }}>{lbl}</div>
+                <input type="number" value={val} onChange={e => setter(e.target.value)} style={{ width: "100%", padding: "8px", borderRadius: 12, border: `1px solid ${COLORS.roseBorder}`, fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }} />
+              </div>
+            ))}
+          </div>
+          <button onClick={() => { if (manualName) { addProduct({ name: manualName, kcal: Number(manualKcal) || 0, protein: Number(manualProtein) || 0, carbs: Number(manualCarbs) || 0, fat: Number(manualFat) || 0 }); setManualName(""); setManualKcal(""); setManualProtein(""); setManualCarbs(""); setManualFat(""); setShowManual(false); } }} style={{ width: "100%", padding: "11px", borderRadius: 20, background: COLORS.rose, border: "none", color: COLORS.white, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
+            Toevoegen aan {activeMeal}
+          </button>
+        </Card>
+      )}
+
       {["ontbijt", "lunch", "diner", "snack"].map(meal => meals[meal].length > 0 && (
         <Card key={meal}>
           <Label>{meal}</Label>
@@ -755,7 +847,10 @@ async function addProduct(product) {
         </Card>
       ))}
 
-      {/* Lola tip */}
+      <button onClick={() => setShowManual(!showManual)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px", borderRadius: 20, border: `1.5px dashed ${COLORS.roseBorder}`, background: "transparent", color: COLORS.rose, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
+        + Zelf product toevoegen
+      </button>
+
       <Card style={{ background: COLORS.roseLight, border: `0.5px solid ${COLORS.roseBorder}` }}>
         <div style={{ fontSize: 11, color: COLORS.rose, fontWeight: 500, marginBottom: 4 }}>✦ Lola tip</div>
         <div style={{ fontSize: 13, color: COLORS.text, lineHeight: 1.6 }}>In je luteale fase heeft je lichaam meer magnesium nodig. Denk aan donkere chocolade of pompoenpitten vanavond.</div>
