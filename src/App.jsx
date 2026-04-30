@@ -630,7 +630,7 @@ Stel één vraag per keer. Reageer warm maar eerlijk. Durf te spiegelen. Houd be
 }
 
 // ── FOOD SCREEN ───────────────────────────────────────────
-function FoodScreen() {
+function FoodScreen({ user }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -662,10 +662,21 @@ const res = await fetch(`/api/food?query=${encodeURIComponent(query)}`);
     setSearching(false);
   }
 
-  function addProduct(product) {
+async function addProduct(product) {
     setMeals(prev => ({ ...prev, [activeMeal]: [...prev[activeMeal], product] }));
     setResults([]);
     setQuery("");
+    if (user) {
+      await supabase.from("food_logs").insert({
+        user_id: user.id,
+        meal: activeMeal,
+        product_name: product.name,
+        kcal: product.kcal,
+        protein: product.protein,
+        carbs: product.carbs,
+        fat: product.fat,
+      });
+    }
   }
 
   function removeProduct(meal, index) {
@@ -853,7 +864,7 @@ onSkip={async () => {
   const screenMap = {
     home: <HomeScreen profile={profile} onCheckin={() => setScreen("checkin")} />,
 checkin: <CheckInScreen user={user} onDone={() => setScreen("home")} />,
-    food: <FoodScreen />,
+food: <FoodScreen user={user} />,
     lola: <LolaScreen profile={profile} />,
   };
 
