@@ -646,9 +646,8 @@ const [grams, setGrams] = useState("100");
   const [manualProtein, setManualProtein] = useState("");
   const [manualCarbs, setManualCarbs] = useState("");
   const [manualFat, setManualFat] = useState("");
-  const [scanning, setScanning] = useState(false);
-  const videoRef = useRef(null);
-  const scannerRef = useRef(null);
+  const [showBarcode, setShowBarcode] = useState(false);
+  const [barcodeInput, setBarcodeInput] = useState("");
 
   const totals = Object.values(meals).flat().reduce(
     (acc, p) => ({ kcal: acc.kcal + (p.kcal || 0), protein: acc.protein + (p.protein || 0), carbs: acc.carbs + (p.carbs || 0), fat: acc.fat + (p.fat || 0) }),
@@ -717,34 +716,14 @@ const [grams, setGrams] = useState("100");
     return null;
   }
 
-  async function startScanner() {
-    setScanning(true);
-    const { BrowserMultiFormatReader } = await import("@zxing/browser");
-    const reader = new BrowserMultiFormatReader();
-    scannerRef.current = reader;
-    try {
-      await reader.decodeFromVideoDevice(undefined, videoRef.current, async (result) => {
-        if (result) {
-          reader.reset();
-          setScanning(false);
-          const product = await searchBarcode(result.getText());
-          if (product) addProduct(product);
-          else alert("Product niet gevonden — voeg het handmatig toe.");
-        }
-      });
-    } catch { setScanning(false); }
-  }
+  async function addProduct(product, gramsAmount = 100) {
 
-  function stopScanner() {
-    scannerRef.current?.reset();
-    setScanning(false);
-  }
 
-async function addProduct(product, grams = 100) {
-    const factor = grams / 100;
+async function addProduct(product, gramsAmount = 100) {
+    const factor = gramsAmount / 100;
     const scaled = {
       ...product,
-      grams,
+      grams: gramsAmount,
       kcal: Math.round(product.kcal * factor),
       protein: Math.round(product.protein * factor),
       carbs: Math.round(product.carbs * factor),
@@ -796,16 +775,31 @@ async function addProduct(product, grams = 100) {
         <button onClick={search} style={{ padding: "12px 16px", borderRadius: 20, background: COLORS.rose, border: "none", color: COLORS.white, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
           {searching ? "..." : "Zoek"}
         </button>
-<button onClick={scanning ? stopScanner : startScanner} style={{ padding: "12px 16px", borderRadius: 20, background: scanning ? COLORS.roseDark : COLORS.roseLight, border: `1px solid ${COLORS.roseBorder}`, color: scanning ? COLORS.white : COLORS.rose, fontSize: 16, cursor: "pointer" }}>
+<button onClick={() => setShowBarcode(!showBarcode)} style={{ padding: "12px 16px", borderRadius: 20, background: COLORS.roseLight, border: `1px solid ${COLORS.roseBorder}`, color: COLORS.rose, fontSize: 16, cursor: "pointer" }}>
   📷
 </button>
       </div>
 
-      {scanning && (
+      {showBarcode && (
         <Card>
-          <Label>Richt je camera op de barcode</Label>
-          <video ref={videoRef} style={{ width: "100%", borderRadius: 12 }} />
-          <button onClick={stopScanner} style={{ marginTop: 10, width: "100%", padding: "10px", borderRadius: 16, background: "transparent", border: `1px solid ${COLORS.roseBorder}`, color: COLORS.muted, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Annuleren</button>
+          <Label>Voer barcode in</Label>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              type="number"
+              placeholder="Scan of typ barcode nummer..."
+              value={barcodeInput}
+              onChange={e => setBarcodeInput(e.target.value)}
+              style={{ flex: 1, padding: "11px 14px", borderRadius: 16, border: `1px solid ${COLORS.roseBorder}`, fontSize: 13, fontFamily: "inherit", outline: "none" }}
+            />
+            <button onClick={async () => {
+              if (!barcodeInput) return;
+              const product = await searchBarcode(barcodeInput);
+              if (product) { addProduct(product); setBarcodeInput(""); setShowBarcode(false); }
+              else alert("Product niet gevonden — voeg het handmatig toe.");
+            }} style={{ padding: "11px 16px", borderRadius: 16, background: COLORS.rose, border: "none", color: COLORS.white, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
+              Zoek
+            </button>
+          </div>
         </Card>
       )}
 
@@ -829,18 +823,26 @@ async function addProduct(product, grams = 100) {
           <Label>Zelf toevoegen</Label>
           <input placeholder="Productnaam" value={manualName} onChange={e => setManualName(e.target.value)} style={{ width: "100%", padding: "10px 14px", borderRadius: 14, border: `1px solid ${COLORS.roseBorder}`, fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 8 }} />
           <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
- {[["gram", manualGrams, setManualGrams], ["kcal/100g", manualKcal, setManualKcal], ["eiwit g/100g", manualProtein, setManualProtein], ["koolhyd g/100g", manualCarbs, setManualCarbs], ["vet g/100g", manualFat, setManualFat]].map(([lbl, val, setter]) => (
+            {[["gram", manualGrams, setManualGrams], ["kcal/100g", manualKcal, setManualKcal], ["eiwit g", manualProtein, setManualProtein], ["koolhyd g", manualCarbs, setManualCarbs], ["vet g", manualFat, setManualFat]].map(([lbl, val, setter]) => (
+              <div key={lbl} style={{ flex: 1 }}>
                 <div style={{ fontSize: 10, color: COLORS.muted, marginBottom: 4 }}>{lbl}</div>
-<input type="number" value={val} onChange={(evt) => { const v = evt.currentTarget.value; setter(v); }} style={{ width: "100%", padding: "8px", borderRadius: 12, border: `1px solid ${COLORS.roseBorder}`, fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }} />            ))}
+                <input type="number" value={val} onChange={(e) => { setter(e.target.value); }} style={{ width: "100%", padding: "8px", borderRadius: 12, border: `1px solid ${COLORS.roseBorder}`, fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }} />
+              </div>
+            ))}
           </div>
-          <button onClick={() => { if (manualName) { addProduct({ name: manualName, kcal: Number(manualKcal) || 0, protein: Number(manualProtein) || 0, carbs: Number(manconst factor = (Number(manualGrams) || 100) / 100;
-addProduct({
-  name: manualName,
-  kcal: Math.round((Number(manualKcal) || 0) * factor),
-  protein: Math.round((Number(manualProtein) || 0) * factor),
-  carbs: Math.round((Number(manualCarbs) || 0) * factor),
-  fat: Math.round((Number(manualFat) || 0) * factor),
-}, Number(manualGrams) || 100);ualCarbs) || 0, fat: Number(manualFat) || 0 }); setManualName(""); setManualKcal(""); setManualProtein(""); setManualCarbs(""); setManualFat(""); setShowManual(false); } }} style={{ width: "100%", padding: "11px", borderRadius: 20, background: COLORS.rose, border: "none", color: COLORS.white, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
+          <button onClick={() => {
+            if (manualName) {
+              const factor = (Number(manualGrams) || 100) / 100;
+              addProduct({
+                name: manualName,
+                kcal: Math.round((Number(manualKcal) || 0) * factor),
+                protein: Math.round((Number(manualProtein) || 0) * factor),
+                carbs: Math.round((Number(manualCarbs) || 0) * factor),
+                fat: Math.round((Number(manualFat) || 0) * factor),
+              }, Number(manualGrams) || 100);
+              setManualName(""); setManualKcal(""); setManualProtein(""); setManualCarbs(""); setManualFat(""); setManualGrams("100"); setShowManual(false);
+            }
+          }} style={{ width: "100%", padding: "11px", borderRadius: 20, background: COLORS.rose, border: "none", color: COLORS.white, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
             Toevoegen aan {activeMeal}
           </button>
         </Card>
@@ -1061,4 +1063,3 @@ food: <FoodScreen user={user} />,
     </div>
   );
 }
-
