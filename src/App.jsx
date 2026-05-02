@@ -632,6 +632,7 @@ Stel één vraag per keer. Reageer warm maar eerlijk. Durf te spiegelen. Houd be
 
 // ── FOOD SCREEN ───────────────────────────────────────────
 function FoodScreen({ user }) {
+  const [manualGrams, setManualGrams] = useState("100");
   const [selectedProduct, setSelectedProduct] = useState(null);
 const [grams, setGrams] = useState("100");
   const [query, setQuery] = useState("");
@@ -828,14 +829,20 @@ async function addProduct(product, grams = 100) {
           <Label>Zelf toevoegen</Label>
           <input placeholder="Productnaam" value={manualName} onChange={e => setManualName(e.target.value)} style={{ width: "100%", padding: "10px 14px", borderRadius: 14, border: `1px solid ${COLORS.roseBorder}`, fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 8 }} />
           <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-            {[["kcal", manualKcal, setManualKcal], ["eiwit g", manualProtein, setManualProtein], ["koolhyd g", manualCarbs, setManualCarbs], ["vet g", manualFat, setManualFat]].map(([lbl, val, setter]) => (
-              <div key={lbl} style={{ flex: 1 }}>
+ {[["gram", manualGrams, setManualGrams], ["kcal/100g", manualKcal, setManualKcal], ["eiwit g/100g", manualProtein, setManualProtein], ["koolhyd g/100g", manualCarbs, setManualCarbs], ["vet g/100g", manualFat, setManualFat]].map(([lbl, val, setter]) => (
                 <div style={{ fontSize: 10, color: COLORS.muted, marginBottom: 4 }}>{lbl}</div>
                 <input type="number" value={val} onChange={e => setter(e.target.value)} style={{ width: "100%", padding: "8px", borderRadius: 12, border: `1px solid ${COLORS.roseBorder}`, fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }} />
               </div>
             ))}
           </div>
-          <button onClick={() => { if (manualName) { addProduct({ name: manualName, kcal: Number(manualKcal) || 0, protein: Number(manualProtein) || 0, carbs: Number(manualCarbs) || 0, fat: Number(manualFat) || 0 }); setManualName(""); setManualKcal(""); setManualProtein(""); setManualCarbs(""); setManualFat(""); setShowManual(false); } }} style={{ width: "100%", padding: "11px", borderRadius: 20, background: COLORS.rose, border: "none", color: COLORS.white, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
+          <button onClick={() => { if (manualName) { addProduct({ name: manualName, kcal: Number(manualKcal) || 0, protein: Number(manualProtein) || 0, carbs: Number(manconst factor = (Number(manualGrams) || 100) / 100;
+addProduct({
+  name: manualName,
+  kcal: Math.round((Number(manualKcal) || 0) * factor),
+  protein: Math.round((Number(manualProtein) || 0) * factor),
+  carbs: Math.round((Number(manualCarbs) || 0) * factor),
+  fat: Math.round((Number(manualFat) || 0) * factor),
+}, Number(manualGrams) || 100);ualCarbs) || 0, fat: Number(manualFat) || 0 }); setManualName(""); setManualKcal(""); setManualProtein(""); setManualCarbs(""); setManualFat(""); setShowManual(false); } }} style={{ width: "100%", padding: "11px", borderRadius: 20, background: COLORS.rose, border: "none", color: COLORS.white, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
             Toevoegen aan {activeMeal}
           </button>
         </Card>
