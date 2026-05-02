@@ -632,6 +632,8 @@ Stel één vraag per keer. Reageer warm maar eerlijk. Durf te spiegelen. Houd be
 
 // ── FOOD SCREEN ───────────────────────────────────────────
 function FoodScreen({ user }) {
+  const [selectedProduct, setSelectedProduct] = useState(null);
+const [grams, setGrams] = useState("100");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -737,8 +739,17 @@ function FoodScreen({ user }) {
     setScanning(false);
   }
 
-  async function addProduct(product) {
-    setMeals(prev => ({ ...prev, [activeMeal]: [...prev[activeMeal], product] }));
+async function addProduct(product, grams = 100) {
+    const factor = grams / 100;
+    const scaled = {
+      ...product,
+      grams,
+      kcal: Math.round(product.kcal * factor),
+      protein: Math.round(product.protein * factor),
+      carbs: Math.round(product.carbs * factor),
+      fat: Math.round(product.fat * factor),
+    };
+    setMeals(prev => ({ ...prev, [activeMeal]: [...prev[activeMeal], scaled] }));
     setResults([]);
     setQuery("");
     if (user) {
@@ -801,7 +812,7 @@ function FoodScreen({ user }) {
         <Card>
           <Label>Resultaten — klik om toe te voegen</Label>
           {results.map((p, i) => (
-            <div key={i} onClick={() => addProduct(p)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `0.5px solid ${COLORS.roseBorder}`, cursor: "pointer" }}>
+<div key={i} onClick={() => { setSelectedProduct(p); setGrams("100"); }} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `0.5px solid ${COLORS.roseBorder}`, cursor: "pointer" }}>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.text }}>{p.name}</div>
                 <div style={{ fontSize: 11, color: COLORS.muted }}>{p.brand} · per 100g · {p.source}</div>
@@ -856,6 +867,26 @@ function FoodScreen({ user }) {
         <div style={{ fontSize: 11, color: COLORS.rose, fontWeight: 500, marginBottom: 4 }}>✦ Lola tip</div>
         <div style={{ fontSize: 13, color: COLORS.text, lineHeight: 1.6 }}>In je luteale fase heeft je lichaam meer magnesium nodig. Denk aan donkere chocolade of pompoenpitten vanavond.</div>
       </Card>
+      {selectedProduct && (
+  <Card>
+    <Label>Hoeveel gram van {selectedProduct.name}?</Label>
+    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+      <input
+        type="number"
+        value={grams}
+        onChange={e => setGrams(e.target.value)}
+        style={{ flex: 1, padding: "11px 14px", borderRadius: 16, border: `1px solid ${COLORS.roseBorder}`, fontSize: 14, fontFamily: "inherit", outline: "none" }}
+      />
+      <span style={{ fontSize: 13, color: COLORS.muted }}>gram</span>
+      <button onClick={() => { addProduct(selectedProduct, Number(grams) || 100); setSelectedProduct(null); setResults([]); }} style={{ padding: "11px 20px", borderRadius: 16, background: COLORS.rose, border: "none", color: COLORS.white, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
+        Voeg toe
+      </button>
+    </div>
+    <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 8 }}>
+      {Math.round(selectedProduct.kcal * (Number(grams) || 100) / 100)} kcal · {Math.round(selectedProduct.protein * (Number(grams) || 100) / 100)}g eiwit
+    </div>
+  </Card>
+)}
     </div>
   );
 }
