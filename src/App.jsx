@@ -831,8 +831,7 @@ async function addProduct(product, grams = 100) {
           <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
  {[["gram", manualGrams, setManualGrams], ["kcal/100g", manualKcal, setManualKcal], ["eiwit g/100g", manualProtein, setManualProtein], ["koolhyd g/100g", manualCarbs, setManualCarbs], ["vet g/100g", manualFat, setManualFat]].map(([lbl, val, setter]) => (
                 <div style={{ fontSize: 10, color: COLORS.muted, marginBottom: 4 }}>{lbl}</div>
-<input type="number" value={val} onChange={(e) => setter(e.target.value)} style={{ width: "100%", padding: "8px", borderRadius: 12, border: `1px solid ${COLORS.roseBorder}`, fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }} />              </div>
-            ))}
+<input type="number" value={val} onChange={(evt) => { const v = evt.currentTarget.value; setter(v); }} style={{ width: "100%", padding: "8px", borderRadius: 12, border: `1px solid ${COLORS.roseBorder}`, fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }} />            ))}
           </div>
           <button onClick={() => { if (manualName) { addProduct({ name: manualName, kcal: Number(manualKcal) || 0, protein: Number(manualProtein) || 0, carbs: Number(manconst factor = (Number(manualGrams) || 100) / 100;
 addProduct({
