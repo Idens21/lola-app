@@ -459,7 +459,6 @@ function HomeScreen({ profile, onCheckin, onGoToLola, user, onPeriodLogged }) {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Goedemorgen" : hour < 18 ? "Goedemiddag" : "Goedenavond";
   const todayLabel = new Date().toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long" });
-  const todayKey = new Date().toISOString().slice(0, 10);
   const { day: cycleDay, phase } = getCycleInfo(profile?.facts?.lastperiod, profile?.facts?.cyclelength);
 
   const [loggingPeriod, setLoggingPeriod] = useState(false);
@@ -471,12 +470,14 @@ function HomeScreen({ profile, onCheckin, onGoToLola, user, onPeriodLogged }) {
 
   useEffect(() => {
     if (!user) { setLoadingData(false); return; }
+    const start = new Date(); start.setHours(0, 0, 0, 0);
+    const end = new Date(); end.setHours(23, 59, 59, 999);
     Promise.all([
       supabase.from("checkins").select("*").eq("user_id", user.id)
-        .gte("created_at", todayKey + "T00:00:00").lte("created_at", todayKey + "T23:59:59")
+        .gte("created_at", start.toISOString()).lte("created_at", end.toISOString())
         .eq("type", "ochtend").maybeSingle(),
       supabase.from("food_logs").select("*").eq("user_id", user.id)
-        .gte("created_at", todayKey + "T00:00:00").lte("created_at", todayKey + "T23:59:59"),
+        .gte("created_at", start.toISOString()).lte("created_at", end.toISOString()),
       supabase.from("checkins").select("energy,slept,wake_mood,created_at").eq("user_id", user.id)
         .order("created_at", { ascending: false }).limit(7),
     ]).then(([{ data: ci }, { data: fl }, { data: rc }]) => {
@@ -485,7 +486,7 @@ function HomeScreen({ profile, onCheckin, onGoToLola, user, onPeriodLogged }) {
       setRecentCheckins(rc || []);
       setLoadingData(false);
     });
-  }, [user, todayKey]);
+  }, [user]);
 
   async function logNewPeriod() {
     setLoggingPeriod(true);
@@ -618,7 +619,6 @@ function HomeScreen({ profile, onCheckin, onGoToLola, user, onPeriodLogged }) {
 
 // ── CHECK-IN SCREEN ───────────────────────────────────────
 function CheckInScreen({ onDone, user, checkinType = "ochtend" }) {
-  const todayKey = new Date().toISOString().slice(0, 10);
   const [existing, setExisting] = useState(null);
   const [editMode, setEditMode] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -631,8 +631,10 @@ function CheckInScreen({ onDone, user, checkinType = "ochtend" }) {
 
   useEffect(() => {
     if (!user) { setLoading(false); return; }
+    const start = new Date(); start.setHours(0, 0, 0, 0);
+    const end = new Date(); end.setHours(23, 59, 59, 999);
     supabase.from("checkins").select("*").eq("user_id", user.id)
-      .gte("created_at", todayKey + "T00:00:00").lte("created_at", todayKey + "T23:59:59")
+      .gte("created_at", start.toISOString()).lte("created_at", end.toISOString())
       .eq("type", checkinType).maybeSingle()
       .then(({ data }) => {
         if (data) {
@@ -1879,6 +1881,12 @@ export default function App() {
   const [profile, setProfile] = useState(null);
   const [screen, setScreen] = useState("home");
   const [user, setUser] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  function goHome() {
+    setScreen("home");
+    setRefreshKey(k => k + 1);
+  }
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -2010,13 +2018,14 @@ onSkip={async () => {
 
   const screenMap = {
     home: <HomeScreen
+      key={refreshKey}
       profile={profile}
       onCheckin={() => setScreen("checkin")}
       onGoToLola={() => setScreen("lola")}
       user={user}
       onPeriodLogged={(dateStr) => setProfile(p => ({ ...p, facts: { ...p.facts, lastperiod: dateStr } }))}
     />,
-    checkin: <CheckInScreen user={user} onDone={() => setScreen("home")} />,
+    checkin: <CheckInScreen user={user} onDone={goHome} />,
     food: <FoodScreen user={user} />,
     history: <HistoryScreen user={user} profile={profile} />,
     lola: <LolaScreen profile={profile} user={user} />,
