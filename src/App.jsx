@@ -649,7 +649,7 @@ function CheckInScreen({ onDone, user, checkinType = "ochtend" }) {
         }
         setLoading(false);
       });
-  }, [user, todayKey, checkinType]);
+  }, [user, checkinType]);
 
   async function save() {
     if (!user) { setSubmitted(true); return; }
@@ -949,26 +949,39 @@ function LolaScreen({ profile, user }) {
   const [dataLoaded, setDataLoaded] = useState(false);
   const [contextData, setContextData] = useState(null);
   const bottomRef = useRef(null);
+  const hasScrolled = useRef(false);
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+  // Scroll naar beneden bij nieuwe berichten
+  useEffect(() => {
+    if (messages.length === 0) return;
+    bottomRef.current?.scrollIntoView({ behavior: hasScrolled.current ? "smooth" : "auto" });
+    hasScrolled.current = true;
+  }, [messages]);
 
+  // Laad alles tegelijk: chatgeschiedenis + check-ins + voeding
   useEffect(() => {
     if (!user) { setDataLoaded(true); return; }
     const today = new Date().toISOString().slice(0, 10);
     Promise.all([
+      supabase.from("lola_messages").select("*").eq("user_id", user.id).order("created_at", { ascending: true }),
       supabase.from("checkins").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
       supabase.from("food_logs").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
-    ]).then(([{ data: checkins }, { data: food }]) => {
+    ]).then(([{ data: history }, { data: checkins }, { data: food }]) => {
+      const loaded = history || [];
+      setMessages(loaded.map(m => ({ id: m.id, from: m.role === "user" ? "user" : "lola", text: m.content, created_at: m.created_at })));
       setContextData({ checkins: checkins || [], food: food || [], today });
       setDataLoaded(true);
+
+      // Stuur welkomstbericht als er nog geen geschiedenis is
+      if (loaded.length === 0) {
+        const name = profile?.facts?.name || "liefste";
+        const greeting = { role: "assistant", content: `Hoi ${name} ✦ Ik ben er. Wat speelt er vandaag?` };
+        supabase.from("lola_messages").insert({ user_id: user.id, ...greeting }).then(({ data }) => {
+          setMessages([{ from: "lola", text: greeting.content, created_at: new Date().toISOString() }]);
+        });
+      }
     });
   }, [user]);
-
-  useEffect(() => {
-    if (!dataLoaded) return;
-    const name = profile?.facts?.name || "liefste";
-    setMessages([{ from: "lola", text: `Hoi ${name} ✦ Ik ben er. Wat speelt er vandaag?` }]);
-  }, [dataLoaded]);
 
   function buildLolaSystem() {
     const facts = profile?.facts || {};
@@ -977,26 +990,20 @@ function LolaScreen({ profile, user }) {
     const food = contextData?.food || [];
     const today = contextData?.today || new Date().toISOString().slice(0, 10);
     const MOODS = ["Zwaar", "Moeizaam", "Oké", "Fris", "Uitgerust"];
-
-    // Vandaag
     const todayCheckin = checkins.find(c => c.created_at?.slice(0, 10) === today);
     const todayFood = food.filter(f => f.created_at?.slice(0, 10) === today);
     const totalKcal = todayFood.reduce((s, f) => s + (f.kcal || 0), 0);
     const totalProtein = todayFood.reduce((s, f) => s + (f.protein || 0), 0);
     const totalFat = todayFood.reduce((s, f) => s + (f.fat || 0), 0);
-
-    // Patroonanalyse over alle data
     const patterns = analyzePatterns(checkins, food, facts.lastperiod, facts.cyclelength);
 
-    return `Je bent Lola, een warme maar eerlijke persoonlijke levenscoach voor vrouwen. Je leest haar volledige data actief mee en herkent patronen.
+    return `Je bent Lola, een warme maar eerlijke persoonlijke levenscoach voor vrouwen. Je hebt een doorlopend gesprek met haar — je kent haar goed en bouwt voort op alles wat eerder is gezegd.
 
 ── PROFIEL ──
 Naam: ${facts.name || "onbekend"}
 Leeftijd: ${facts.birthdate ? Math.floor((Date.now() - new Date(facts.birthdate)) / (365.25 * 86400000)) + " jaar" : "onbekend"}
 Sterrenbeeld: ${getZodiac(facts.birthdate) || "onbekend"}
-Human Design type: ${facts.hdtype || "onbekend"}
-HD Profiel: ${facts.hdprofile || "onbekend"}
-HD Autoriteit: ${facts.hdauthority || "onbekend"}
+Human Design: ${facts.hdtype || "onbekend"} · Profiel ${facts.hdprofile || "?"} · Autoriteit ${facts.hdauthority || "?"}
 Cycluslengte: ${facts.cyclelength || "onbekend"}
 
 ── CYCLUS VANDAAG ──
@@ -1010,46 +1017,49 @@ ${todayCheckin
   : "Geen check-in vandaag."}
 
 ── VOEDING VANDAAG ──
-${todayFood.length > 0
-  ? `${totalKcal} kcal · ${totalProtein}g eiwit · ${totalFat}g vet\nProducten: ${todayFood.map(f => f.product_name).join(", ")}`
-  : "Nog niets gelogd."}
+${todayFood.length > 0 ? `${totalKcal} kcal · ${totalProtein}g eiwit · ${totalFat}g vet` : "Nog niets gelogd."}
 
-── PATROONANALYSE (${patterns?.total ?? 0} check-ins totaal) ──
-${!patterns ? "Onvoldoende data voor patroonherkenning (minimaal 3 check-ins nodig)." : `
-Energie afgelopen 7 dagen: gem. ${patterns.recentAvgEnergy}/5 · ${patterns.recentLowDays} dag(en) met energie ≤2
-
-Energie per cyclusfase: ${patterns.phaseEnergy || "onvoldoende data"}
-
-Cyclus-dagen met consistent lage energie:
-${patterns.lowEnergyDays.length > 0 ? patterns.lowEnergyDays.map(d => `  • ${d}`).join("\n") : "  • Geen duidelijk patroon gevonden"}
-
-Cyclus-dagen met consistent slechte slaap:
-${patterns.poorSleepDays.length > 0 ? patterns.poorSleepDays.map(d => `  • ${d}`).join("\n") : "  • Geen duidelijk patroon gevonden"}
-
-Voeding → energie correlaties:
-${patterns.fatCorr ? `  • ${patterns.fatCorr}` : ""}
-${patterns.proteinCorr ? `  • ${patterns.proteinCorr}` : ""}
-${patterns.kcalCorr ? `  • ${patterns.kcalCorr}` : ""}
-${!patterns.fatCorr && !patterns.proteinCorr && !patterns.kcalCorr ? "  • Onvoldoende data voor voedingscorrelaties" : ""}`.trim()}
+── PATROONANALYSE ──
+${!patterns ? "Onvoldoende data (min. 3 check-ins)." : `Gem. energie 7 dagen: ${patterns.recentAvgEnergy}/5 · Lage energie cyclusdagen: ${patterns.lowEnergyDays.join(", ") || "geen"} · Slechte slaap cyclusdagen: ${patterns.poorSleepDays.join(", ") || "geen"} · ${patterns.fatCorr || ""} ${patterns.proteinCorr || ""}`}
 
 ── HOE JE REAGEERT ──
-- Je benoemt patronen die je in de data ziet wanneer het relevant aanvoelt, concreet en specifiek
-- Voorbeeldstijl: "Ik zie dat je op dag 28-29 van je cyclus bijna altijd slecht slaapt. Als je de dag ervoor meer vetten eet, lijkt dat iets te helpen — wil je dat proberen?"
-- Je verbindt altijd data aan wat ze zegt of voelt
+- Dit is een doorlopend gesprek. Verwijs naar wat ze eerder zei als dat relevant is.
+- Benoem patronen concreet en specifiek als het aanvoelt.
 - Eén vraag per bericht. Warm, eerlijk, kort. Schrijf in het Nederlands.`;
   }
 
   async function send() {
     if (!input.trim() || loading) return;
-    const userMsg = input;
+    const userMsg = input.trim();
     setInput("");
-    const newMessages = [...messages, { from: "user", text: userMsg }];
-    setMessages(newMessages);
     setLoading(true);
-    const apiMessages = newMessages.map((m) => ({ role: m.from === "user" ? "user" : "assistant", content: m.text }));
+
+    // Sla gebruikersbericht op en toon het direct
+    const userRow = { user_id: user.id, role: "user", content: userMsg };
+    const { data: savedUser } = await supabase.from("lola_messages").insert(userRow).select().single();
+    const newUserMsg = { id: savedUser?.id, from: "user", text: userMsg, created_at: savedUser?.created_at };
+    const updatedMessages = [...messages, newUserMsg];
+    setMessages(updatedMessages);
+
+    // Stuur de volledige geschiedenis naar Claude (max 60 berichten)
+    const apiMessages = updatedMessages.slice(-60).map(m => ({ role: m.from === "user" ? "user" : "assistant", content: m.text }));
     const reply = await askLola(apiMessages, buildLolaSystem());
-    setMessages((prev) => [...prev, { from: "lola", text: reply }]);
+
+    // Sla Lola's antwoord op
+    const lolaRow = { user_id: user.id, role: "assistant", content: reply };
+    const { data: savedLola } = await supabase.from("lola_messages").insert(lolaRow).select().single();
+    setMessages(prev => [...prev, { id: savedLola?.id, from: "lola", text: reply, created_at: savedLola?.created_at }]);
     setLoading(false);
+  }
+
+  // Datum-scheider hulpfunctie
+  function formatDateLabel(dateStr) {
+    const d = new Date(dateStr);
+    const today = new Date();
+    const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+    if (d.toDateString() === today.toDateString()) return "Vandaag";
+    if (d.toDateString() === yesterday.toDateString()) return "Gisteren";
+    return d.toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long" });
   }
 
   if (!dataLoaded) return (
@@ -1059,24 +1069,49 @@ ${!patterns.fatCorr && !patterns.proteinCorr && !patterns.kcalCorr ? "  • Onvo
     </div>
   );
 
+  // Groepeer berichten per dag voor datum-scheiders
+  let lastDateLabel = null;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "calc(100dvh - 160px)", width: "100%", maxWidth: "100%", overflow: "hidden" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-        <div style={{ width: 40, height: 40, borderRadius: "50%", background: COLORS.roseLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, border: `1px solid ${COLORS.roseBorder}` }}>✦</div>
-        <div>
-          <div style={{ fontSize: 15, fontWeight: 500, color: COLORS.text }}>Lola</div>
-          <div style={{ fontSize: 11, color: COLORS.muted }}>Jouw persoonlijke coach</div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 40, height: 40, borderRadius: "50%", background: COLORS.roseLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, border: `1px solid ${COLORS.roseBorder}` }}>✦</div>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 500, color: COLORS.text }}>Lola</div>
+            <div style={{ fontSize: 11, color: COLORS.muted }}>{messages.length > 1 ? `${messages.length} berichten` : "Jouw persoonlijke coach"}</div>
+          </div>
         </div>
       </div>
+
       <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12, paddingBottom: 16 }}>
-        {messages.map((msg, i) => (
-          <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: msg.from === "user" ? "flex-end" : "flex-start" }}>
-            {msg.from === "lola" && <div style={{ fontSize: 10, color: COLORS.muted, marginBottom: 3, fontWeight: 500 }}>Lola</div>}
-            <div style={{ maxWidth: "75%", wordBreak: "break-word", padding: "11px 15px", borderRadius: 18, fontSize: 13, lineHeight: 1.6, background: msg.from === "lola" ? COLORS.roseLight : COLORS.rose, color: msg.from === "lola" ? COLORS.text : COLORS.white, borderBottomLeftRadius: msg.from === "lola" ? 4 : 18, borderBottomRightRadius: msg.from === "user" ? 4 : 18, border: msg.from === "lola" ? `0.5px solid ${COLORS.roseBorder}` : "none" }}>
-              {msg.text}
+        {messages.map((msg, i) => {
+          const dateLabel = msg.created_at ? formatDateLabel(msg.created_at) : null;
+          const showDate = dateLabel && dateLabel !== lastDateLabel;
+          if (showDate) lastDateLabel = dateLabel;
+          return (
+            <div key={msg.id || i}>
+              {showDate && (
+                <div style={{ textAlign: "center", fontSize: 11, color: COLORS.muted, margin: "8px 0", display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ flex: 1, height: "0.5px", background: COLORS.roseBorder }} />
+                  {dateLabel}
+                  <div style={{ flex: 1, height: "0.5px", background: COLORS.roseBorder }} />
+                </div>
+              )}
+              <div style={{ display: "flex", flexDirection: "column", alignItems: msg.from === "user" ? "flex-end" : "flex-start" }}>
+                {msg.from === "lola" && <div style={{ fontSize: 10, color: COLORS.muted, marginBottom: 3, fontWeight: 500 }}>Lola</div>}
+                <div style={{ maxWidth: "75%", wordBreak: "break-word", padding: "11px 15px", borderRadius: 18, fontSize: 13, lineHeight: 1.6, background: msg.from === "lola" ? COLORS.roseLight : COLORS.rose, color: msg.from === "lola" ? COLORS.text : COLORS.white, borderBottomLeftRadius: msg.from === "lola" ? 4 : 18, borderBottomRightRadius: msg.from === "user" ? 4 : 18, border: msg.from === "lola" ? `0.5px solid ${COLORS.roseBorder}` : "none" }}>
+                  {msg.text}
+                </div>
+                {msg.created_at && (
+                  <div style={{ fontSize: 10, color: COLORS.muted, marginTop: 2 }}>
+                    {new Date(msg.created_at).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
         {loading && (
           <div style={{ alignSelf: "flex-start" }}>
             <div style={{ fontSize: 10, color: COLORS.muted, marginBottom: 3, fontWeight: 500 }}>Lola</div>
@@ -1087,9 +1122,10 @@ ${!patterns.fatCorr && !patterns.proteinCorr && !patterns.kcalCorr ? "  • Onvo
         )}
         <div ref={bottomRef} />
       </div>
+
       <div style={{ display: "flex", gap: 10, paddingTop: 12, borderTop: `0.5px solid ${COLORS.roseBorder}` }}>
-        <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} placeholder="Zeg iets tegen Lola..." style={{ flex: 1, minWidth: 0, padding: "11px 16px", borderRadius: 24, border: `1px solid ${COLORS.roseBorder}`, background: COLORS.white, color: COLORS.text, fontSize: 13, fontFamily: "inherit", outline: "none" }} />
-        <button onClick={send} disabled={loading} style={{ width: 44, height: 44, borderRadius: "50%", background: loading ? COLORS.roseBorder : COLORS.rose, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()} placeholder="Zeg iets tegen Lola..." style={{ flex: 1, minWidth: 0, padding: "11px 16px", borderRadius: 24, border: `1px solid ${COLORS.roseBorder}`, background: COLORS.white, color: COLORS.text, fontSize: 13, fontFamily: "inherit", outline: "none" }} />
+        <button onClick={send} disabled={loading} style={{ width: 44, height: 44, borderRadius: "50%", background: loading ? COLORS.roseBorder : COLORS.rose, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M8 3l5 5-5 5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
         </button>
       </div>
