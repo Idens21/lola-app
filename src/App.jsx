@@ -608,6 +608,153 @@ function CheckInScreen({ onDone, user }) {
   );
 }
 
+// ── PATROONANALYSE HELPER ─────────────────────────────────
+function analyzePatterns(allCheckins, allFood, lastperiod, cyclelength) {
+  const SLEEP_SCORE = { "<5 uur": 1, "5–6 uur": 2, "6–7 uur": 3, "7–8 uur": 4, "8+ uur": 5 };
+
+  // Bouw een map van datum → voedingstotalen
+  const foodByDate = {};
+  allFood.forEach(f => {
+    const d = f.created_at?.slice(0, 10);
+    if (!d) return;
+    if (!foodByDate[d]) foodByDate[d] = { kcal: 0, fat: 0, protein: 0, carbs: 0 };
+    foodByDate[d].kcal += f.kcal || 0;
+    foodByDate[d].fat += f.fat || 0;
+    foodByDate[d].protein += f.protein || 0;
+    foodByDate[d].carbs += f.carbs || 0;
+  });
+
+  // Verrijk elke check-in met cyclusdag en voeding van de vorige dag
+  const enriched = allCheckins
+    .filter(c => c.created_at && c.energy)
+    .map(c => {
+      const date = c.created_at.slice(0, 10);
+      const prevDate = new Date(new Date(date) - 86400000).toISOString().slice(0, 10);
+      const { day: cycleDay, phase } = getCycleInfoForDate(lastperiod, cyclelength, new Date(date));
+      return {
+        ...c,
+        date,
+        cycleDay,
+        phaseName: phase.name,
+        prevFood: foodByDate[prevDate] || null,
+        todayFood: foodByDate[date] || null,
+        sleepScore: SLEEP_SCORE[c.slept] || null,
+      };
+    });
+
+  if (enriched.length < 3) return null;
+
+  // 1. Energie per cyclusdag (groepeer per dag, min 2 datapunten)
+  const energyPerCycleDay = {};
+  const sleepPerCycleDay = {};
+  const moodPerCycleDay = {};
+  enriched.forEach(e => {
+    if (!e.cycleDay) return;
+    if (!energyPerCycleDay[e.cycleDay]) energyPerCycleDay[e.cycleDay] = [];
+    energyPerCycleDay[e.cycleDay].push(e.energy);
+    if (e.sleepScore) {
+      if (!sleepPerCycleDay[e.cycleDay]) sleepPerCycleDay[e.cycleDay] = [];
+      sleepPerCycleDay[e.cycleDay].push(e.sleepScore);
+    }
+    if (e.wake_mood !== null && e.wake_mood !== undefined) {
+      if (!moodPerCycleDay[e.cycleDay]) moodPerCycleDay[e.cycleDay] = [];
+      moodPerCycleDay[e.cycleDay].push(e.wake_mood);
+    }
+  });
+
+  const avg = arr => arr.reduce((s, v) => s + v, 0) / arr.length;
+
+  // Cyclus-dagen met consistent lage energie (gem < 2.5, min 2 metingen)
+  const lowEnergyDays = Object.entries(energyPerCycleDay)
+    .filter(([, vals]) => vals.length >= 2 && avg(vals) < 2.5)
+    .sort((a, b) => avg(a[1]) - avg(b[1]))
+    .slice(0, 5)
+    .map(([day, vals]) => `dag ${day} (gem. ${avg(vals).toFixed(1)}/5, n=${vals.length})`);
+
+  // Cyclus-dagen met slechte slaap (gem sleepscore < 2.5)
+  const poorSleepDays = Object.entries(sleepPerCycleDay)
+    .filter(([, vals]) => vals.length >= 2 && avg(vals) < 2.5)
+    .sort((a, b) => avg(a[1]) - avg(b[1]))
+    .slice(0, 5)
+    .map(([day, vals]) => `dag ${day} (gem. slaap ${avg(vals).toFixed(1)}/5, n=${vals.length})`);
+
+  // Energie per fase
+  const energyPerPhase = {};
+  enriched.forEach(e => {
+    if (!e.phaseName) return;
+    if (!energyPerPhase[e.phaseName]) energyPerPhase[e.phaseName] = [];
+    energyPerPhase[e.phaseName].push(e.energy);
+  });
+  const phaseEnergy = Object.entries(energyPerPhase)
+    .filter(([, vals]) => vals.length >= 2)
+    .map(([phase, vals]) => `${phase}: gem. ${avg(vals).toFixed(1)}/5`)
+    .join(", ");
+
+  // Voedingscorrelaties: splits op hoog/laag vet/eiwit dag ervoor
+  const withPrevFood = enriched.filter(e => e.prevFood);
+  let fatCorr = "", proteinCorr = "", kcalCorr = "";
+
+  if (withPrevFood.length >= 4) {
+    const medFat = withPrevFood.map(e => e.prevFood.fat).sort((a,b)=>a-b)[Math.floor(withPrevFood.length/2)];
+    const highFat = withPrevFood.filter(e => e.prevFood.fat >= medFat);
+    const lowFat = withPrevFood.filter(e => e.prevFood.fat < medFat);
+    if (highFat.length >= 2 && lowFat.length >= 2) {
+      const diff = avg(highFat.map(e => e.energy)) - avg(lowFat.map(e => e.energy));
+      if (Math.abs(diff) >= 0.4) {
+        fatCorr = diff > 0
+          ? `Na een dag met veel vetten (>${medFat}g) is haar energie gemiddeld ${diff.toFixed(1)} punt hoger.`
+          : `Na een dag met veel vetten (>${medFat}g) is haar energie gemiddeld ${Math.abs(diff).toFixed(1)} punt lager.`;
+      }
+    }
+
+    const medProt = withPrevFood.map(e => e.prevFood.protein).sort((a,b)=>a-b)[Math.floor(withPrevFood.length/2)];
+    const highProt = withPrevFood.filter(e => e.prevFood.protein >= medProt);
+    const lowProt = withPrevFood.filter(e => e.prevFood.protein < medProt);
+    if (highProt.length >= 2 && lowProt.length >= 2) {
+      const diff = avg(highProt.map(e => e.energy)) - avg(lowProt.map(e => e.energy));
+      if (Math.abs(diff) >= 0.4) {
+        proteinCorr = diff > 0
+          ? `Na een dag met veel eiwitten (>${medProt}g) is haar energie gemiddeld ${diff.toFixed(1)} punt hoger.`
+          : `Na een dag met veel eiwitten (>${medProt}g) is haar energie gemiddeld ${Math.abs(diff).toFixed(1)} punt lager.`;
+      }
+    }
+
+    // Slaap-vetten correlatie
+    const withSleep = withPrevFood.filter(e => e.sleepScore);
+    if (withSleep.length >= 4) {
+      const medFatS = withSleep.map(e => e.prevFood.fat).sort((a,b)=>a-b)[Math.floor(withSleep.length/2)];
+      const highFatS = withSleep.filter(e => e.prevFood.fat >= medFatS);
+      const lowFatS = withSleep.filter(e => e.prevFood.fat < medFatS);
+      if (highFatS.length >= 2 && lowFatS.length >= 2) {
+        const diff = avg(highFatS.map(e => e.sleepScore)) - avg(lowFatS.map(e => e.sleepScore));
+        if (Math.abs(diff) >= 0.4) {
+          kcalCorr = diff > 0
+            ? `Na een dag met veel vetten slaapt ze gemiddeld ${diff.toFixed(1)} punt beter (op schaal 1–5).`
+            : `Na een dag met veel vetten slaapt ze gemiddeld ${Math.abs(diff).toFixed(1)} punt slechter.`;
+        }
+      }
+    }
+  }
+
+  // Recente 7 dagen samenvatting
+  const recent7 = enriched.slice(0, 7);
+  const recentAvgEnergy = avg(recent7.map(e => e.energy)).toFixed(1);
+  const recentLowDays = recent7.filter(e => e.energy <= 2).length;
+
+  return {
+    total: enriched.length,
+    lowEnergyDays,
+    poorSleepDays,
+    phaseEnergy,
+    fatCorr,
+    proteinCorr,
+    kcalCorr,
+    recentAvgEnergy,
+    recentLowDays,
+    recentCount: recent7.length,
+  };
+}
+
 // ── LOLA CHAT ─────────────────────────────────────────────
 function LolaScreen({ profile, user }) {
   const [messages, setMessages] = useState([]);
@@ -622,12 +769,11 @@ function LolaScreen({ profile, user }) {
   useEffect(() => {
     if (!user) { setDataLoaded(true); return; }
     const today = new Date().toISOString().slice(0, 10);
-    const twoWeeksAgo = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
     Promise.all([
-      supabase.from("checkins").select("*").eq("user_id", user.id).gte("created_at", twoWeeksAgo).order("created_at", { ascending: false }),
-      supabase.from("food_logs").select("*").eq("user_id", user.id).gte("created_at", today).lte("created_at", today + "T23:59:59"),
+      supabase.from("checkins").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
+      supabase.from("food_logs").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
     ]).then(([{ data: checkins }, { data: food }]) => {
-      setContextData({ checkins: checkins || [], food: food || [] });
+      setContextData({ checkins: checkins || [], food: food || [], today });
       setDataLoaded(true);
     });
   }, [user]);
@@ -643,67 +789,64 @@ function LolaScreen({ profile, user }) {
     const { day: cycleDay, phase } = getCycleInfo(facts.lastperiod, facts.cyclelength);
     const checkins = contextData?.checkins || [];
     const food = contextData?.food || [];
-
-    // Vandaag check-in
-    const todayKey = new Date().toISOString().slice(0, 10);
-    const todayCheckin = checkins.find(c => c.created_at?.slice(0, 10) === todayKey);
+    const today = contextData?.today || new Date().toISOString().slice(0, 10);
     const MOODS = ["Zwaar", "Moeizaam", "Oké", "Fris", "Uitgerust"];
 
-    // Patroonanalyse laatste 7 check-ins
-    const recent = checkins.slice(0, 7);
-    const avgEnergy = recent.length
-      ? (recent.reduce((s, c) => s + (c.energy || 0), 0) / recent.length).toFixed(1)
-      : null;
-    const energyPattern = recent.map(c => c.energy).filter(Boolean);
-    const lowEnergyDays = energyPattern.filter(e => e <= 2).length;
+    // Vandaag
+    const todayCheckin = checkins.find(c => c.created_at?.slice(0, 10) === today);
+    const todayFood = food.filter(f => f.created_at?.slice(0, 10) === today);
+    const totalKcal = todayFood.reduce((s, f) => s + (f.kcal || 0), 0);
+    const totalProtein = todayFood.reduce((s, f) => s + (f.protein || 0), 0);
+    const totalFat = todayFood.reduce((s, f) => s + (f.fat || 0), 0);
 
-    const slaapVerdeling = {};
-    recent.forEach(c => { if (c.slept) slaapVerdeling[c.slept] = (slaapVerdeling[c.slept] || 0) + 1; });
-    const meesteSlaap = Object.entries(slaapVerdeling).sort((a, b) => b[1] - a[1])[0]?.[0];
+    // Patroonanalyse over alle data
+    const patterns = analyzePatterns(checkins, food, facts.lastperiod, facts.cyclelength);
 
-    // Voeding vandaag
-    const totalKcal = food.reduce((s, f) => s + (f.kcal || 0), 0);
-    const totalProtein = food.reduce((s, f) => s + (f.protein || 0), 0);
-
-    return `Je bent Lola, een warme maar eerlijke persoonlijke levenscoach voor vrouwen. Je kent ${facts.name || "haar"} goed en leest haar data actief mee.
+    return `Je bent Lola, een warme maar eerlijke persoonlijke levenscoach voor vrouwen. Je leest haar volledige data actief mee en herkent patronen.
 
 ── PROFIEL ──
 Naam: ${facts.name || "onbekend"}
-Human Design type: ${facts.hdtype || "onbekend"}
-Gemiddelde cycluslengte: ${facts.cyclelength || "onbekend"}
+Human Design: ${facts.hdtype || "onbekend"}
+Cycluslengte: ${facts.cyclelength || "onbekend"}
 
 ── CYCLUS VANDAAG ──
-Fase: ${phase.name}${cycleDay ? ` · dag ${cycleDay}` : ""}
-Wat dit betekent: ${phase.desc}
+${phase.name}${cycleDay ? ` · dag ${cycleDay}` : ""} — ${phase.desc}
 
 ── CHECK-IN VANDAAG ──
 ${todayCheckin
-  ? `Stemming bij het opstaan: ${MOODS[todayCheckin.wake_mood] || "niet ingevuld"}
-Energieniveau: ${todayCheckin.energy || "?"}/5
-Slaap: ${todayCheckin.slept || "niet ingevuld"}
-Intentie: "${todayCheckin.intention || "geen"}"
-Notitie aan Lola: "${todayCheckin.note || "geen"}"`
-  : "Nog geen check-in vandaag gedaan."}
-
-── PATROON AFGELOPEN 7 DAGEN ──
-Gemiddeld energieniveau: ${avgEnergy || "onvoldoende data"}
-Dagen met lage energie (≤2): ${lowEnergyDays} van de ${recent.length}
-Meest voorkomende slaap: ${meesteSlaap || "onvoldoende data"}
-${lowEnergyDays >= 3 ? `⚠ Let op: ${lowEnergyDays} van de laatste ${recent.length} dagen had ze een energie van 2 of lager.` : ""}
+  ? `Stemming: ${MOODS[todayCheckin.wake_mood] ?? "?"} | Energie: ${todayCheckin.energy ?? "?"}/5 | Slaap: ${todayCheckin.slept ?? "?"}`
+    + (todayCheckin.intention ? `\nIntentie: "${todayCheckin.intention}"` : "")
+    + (todayCheckin.note ? `\nNotitie: "${todayCheckin.note}"` : "")
+  : "Geen check-in vandaag."}
 
 ── VOEDING VANDAAG ──
-${food.length > 0
-  ? `Totaal: ${totalKcal} kcal · ${totalProtein}g eiwit
-Producten: ${food.map(f => f.product_name).join(", ")}`
-  : "Nog niets gelogd vandaag."}
+${todayFood.length > 0
+  ? `${totalKcal} kcal · ${totalProtein}g eiwit · ${totalFat}g vet\nProducten: ${todayFood.map(f => f.product_name).join(", ")}`
+  : "Nog niets gelogd."}
+
+── PATROONANALYSE (${patterns?.total ?? 0} check-ins totaal) ──
+${!patterns ? "Onvoldoende data voor patroonherkenning (minimaal 3 check-ins nodig)." : `
+Energie afgelopen 7 dagen: gem. ${patterns.recentAvgEnergy}/5 · ${patterns.recentLowDays} dag(en) met energie ≤2
+
+Energie per cyclusfase: ${patterns.phaseEnergy || "onvoldoende data"}
+
+Cyclus-dagen met consistent lage energie:
+${patterns.lowEnergyDays.length > 0 ? patterns.lowEnergyDays.map(d => `  • ${d}`).join("\n") : "  • Geen duidelijk patroon gevonden"}
+
+Cyclus-dagen met consistent slechte slaap:
+${patterns.poorSleepDays.length > 0 ? patterns.poorSleepDays.map(d => `  • ${d}`).join("\n") : "  • Geen duidelijk patroon gevonden"}
+
+Voeding → energie correlaties:
+${patterns.fatCorr ? `  • ${patterns.fatCorr}` : ""}
+${patterns.proteinCorr ? `  • ${patterns.proteinCorr}` : ""}
+${patterns.kcalCorr ? `  • ${patterns.kcalCorr}` : ""}
+${!patterns.fatCorr && !patterns.proteinCorr && !patterns.kcalCorr ? "  • Onvoldoende data voor voedingscorrelaties" : ""}`.trim()}
 
 ── HOE JE REAGEERT ──
-- Je benoemt proactief patronen die je ziet in de data, maar alleen als het relevant aanvoelt
-- Je verbindt data aan wat ze zegt: "Je energie was de afgelopen dagen laag én je hebt weinig gegeten — wat speelt er?"
-- Je stel altijd maar één vraag per bericht
-- Reageer warm maar eerlijk, durf te spiegelen
-- Houd berichten kort (max 3 zinnen + één vraag)
-- Schrijf in het Nederlands`;
+- Je benoemt patronen die je in de data ziet wanneer het relevant aanvoelt, concreet en specifiek
+- Voorbeeldstijl: "Ik zie dat je op dag 28-29 van je cyclus bijna altijd slecht slaapt. Als je de dag ervoor meer vetten eet, lijkt dat iets te helpen — wil je dat proberen?"
+- Je verbindt altijd data aan wat ze zegt of voelt
+- Eén vraag per bericht. Warm, eerlijk, kort. Schrijf in het Nederlands.`;
   }
 
   async function send() {
