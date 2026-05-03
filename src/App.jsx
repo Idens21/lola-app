@@ -2190,12 +2190,19 @@ export default function App() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         setUser(session.user);
-        supabase.from("profiles").select("*").eq("id", session.user.id).single().then(({ data }) => {
-          if (data) {
+        supabase.from("profiles").select("*").eq("id", session.user.id).maybeSingle().then(({ data, error }) => {
+          if (data?.id) {
+            // Profiel gevonden — ga direct naar de app
             setProfile({ facts: data });
             setPhase("app");
-          } else {
+          } else if (!error) {
+            // Geen profiel — nieuwe gebruiker, start intake
             setPhase("facts");
+          } else {
+            // DB-fout — ga toch naar de app om te voorkomen dat bestaande gebruiker opnieuw intake doet
+            console.error("Profile load error:", error);
+            setProfile({ facts: {} });
+            setPhase("app");
           }
         });
       }
