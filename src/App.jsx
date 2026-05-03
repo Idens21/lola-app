@@ -1028,10 +1028,9 @@ ${facts.personality_profile
 }
 
 ── FEITEN ──
-Naam: ${facts.name || "onbekend"}
-Leeftijd: ${facts.birthdate ? Math.floor((Date.now() - new Date(facts.birthdate)) / (365.25 * 86400000)) + " jaar" : "onbekend"}
-Sterrenbeeld: ${getZodiac(facts.birthdate) || "onbekend"}
-Human Design: ${facts.hdtype || "onbekend"} · Profiel ${facts.hdprofile || "?"} · Autoriteit ${facts.hdauthority || "?"}
+Naam: ${facts.name || "onbekend"} · ${facts.birthdate ? Math.floor((Date.now() - new Date(facts.birthdate)) / (365.25 * 86400000)) + " jaar" : ""} · ${getZodiac(facts.birthdate) || ""}
+Werk: ${facts.work || "onbekend"} · Relatie: ${facts.relationship_status || "onbekend"} · Kinderen: ${facts.children || "onbekend"} · Woont: ${facts.living_situation || "onbekend"}
+Human Design: ${facts.hdtype || "?"} · Profiel ${facts.hdprofile || "?"} · Autoriteit ${facts.hdauthority || "?"}
 Cycluslengte: ${facts.cyclelength || "onbekend"}
 
 ── CYCLUS VANDAAG ──
@@ -1844,13 +1843,17 @@ function HumanDesignScreen({ profile, user }) {
 }
 
 // ── PROFIEL SCREEN ────────────────────────────────────────
-function ProfileScreen({ profile, user, onProfileUpdated }) {
+function ProfileScreen({ profile, user, onProfileUpdated, onRestartIntake }) {
   const facts = profile?.facts || {};
   const [form, setForm] = useState({
     name: facts.name || "",
     birthdate: facts.birthdate || "",
     birthtime: facts.birthtime || "",
     birthplace: facts.birthplace || "",
+    work: facts.work || "",
+    relationship_status: facts.relationship_status || "",
+    children: facts.children || "",
+    living_situation: facts.living_situation || "",
     hdtype: facts.hdtype || "",
     hdprofile: facts.hdprofile || "",
     hdauthority: facts.hdauthority || "",
@@ -1874,6 +1877,10 @@ Profielgegevens:
 - Leeftijd: ${age ? age + " jaar" : "onbekend"}
 - Geboorteplaats: ${form.birthplace || "onbekend"}
 - Sterrenbeeld: ${zodiac || "onbekend"}
+- Werk: ${form.work || "onbekend"}
+- Relatiestatus: ${form.relationship_status || "onbekend"}
+- Kinderen: ${form.children || "onbekend"}
+- Woonsituatie: ${form.living_situation || "onbekend"}
 - Human Design type: ${form.hdtype || "onbekend"}
 - HD Profiel: ${form.hdprofile || "onbekend"}
 - HD Autoriteit: ${form.hdauthority || "onbekend"}
@@ -1966,6 +1973,37 @@ Schrijf in het Nederlands. Max 450 woorden. Doorlopende tekst, geen kopjes. Verw
       </Card>
 
       <Card>
+        <Label>Leefsituatie</Label>
+        <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 14 }}>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 500, color: COLORS.muted }}>Werk / beroep</label>
+            <input type="text" value={form.work} placeholder="bijv. Zelfstandig ondernemer, marketeer..." onChange={e => set("work", e.target.value)} style={inputStyle} />
+          </div>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 500, color: COLORS.muted }}>Relatiestatus</label>
+            <select value={form.relationship_status} onChange={e => set("relationship_status", e.target.value)} style={selectStyle}>
+              <option value="">Liever niet zeggen</option>
+              {["Single","Daterend","Relatie","Samenwonend","Getrouwd","Gescheiden","Weduwe"].map(o => <option key={o}>{o}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 500, color: COLORS.muted }}>Kinderen</label>
+            <select value={form.children} onChange={e => set("children", e.target.value)} style={selectStyle}>
+              <option value="">Niet ingevuld</option>
+              {["Geen kinderen","1 kind","2 kinderen","3 of meer kinderen","Zwanger"].map(o => <option key={o}>{o}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 500, color: COLORS.muted }}>Woonsituatie</label>
+            <select value={form.living_situation} onChange={e => set("living_situation", e.target.value)} style={selectStyle}>
+              <option value="">Niet ingevuld</option>
+              {["Alleen","Met partner","Met kinderen","Met partner en kinderen","Met huisgenoten","Bij familie"].map(o => <option key={o}>{o}</option>)}
+            </select>
+          </div>
+        </div>
+      </Card>
+
+      <Card>
         <Label>Human Design</Label>
         <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 14 }}>
           <div>
@@ -2008,6 +2046,16 @@ Schrijf in het Nederlands. Max 450 woorden. Doorlopende tekst, geen kopjes. Verw
       <button onClick={save} disabled={saving} style={{ padding: "15px", borderRadius: 24, background: saved ? COLORS.softGreen : COLORS.rose, border: saved ? `1px solid ${COLORS.softGreenBorder}` : "none", color: saved ? COLORS.text : COLORS.white, fontSize: 15, fontWeight: 500, cursor: "pointer", fontFamily: "inherit", transition: "background 0.3s" }}>
         {saving ? "Opslaan..." : saved ? "✓ Opgeslagen" : "Profiel opslaan"}
       </button>
+
+      <Card style={{ background: COLORS.lavender, border: `0.5px solid ${COLORS.lavenderBorder}` }}>
+        <Label>Intakegesprek</Label>
+        <p style={{ fontSize: 12, color: COLORS.muted, lineHeight: 1.6, marginTop: 6, marginBottom: 12 }}>
+          Het intakegesprek helpt Lola om jou echt te leren kennen. Aan het einde schrijft ze een persoonlijk portret op basis van het gesprek.
+        </p>
+        <button onClick={onRestartIntake} style={{ width: "100%", padding: "13px", borderRadius: 24, background: "transparent", border: `1.5px solid ${COLORS.lavenderBorder}`, color: COLORS.text, fontSize: 14, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
+          ↺ Intakegesprek (opnieuw) starten
+        </button>
+      </Card>
 
       <HumanDesignScreen profile={profile} user={user} />
     </div>
@@ -2174,7 +2222,7 @@ onSkip={async () => {
     food: <FoodScreen user={user} />,
     history: <HistoryScreen user={user} profile={profile} />,
     lola: <LolaScreen profile={profile} user={user} />,
-    profile: <ProfileScreen profile={profile} user={user} onProfileUpdated={(updated) => setProfile(p => ({ ...p, facts: updated }))} />,
+    profile: <ProfileScreen profile={profile} user={user} onProfileUpdated={(updated) => setProfile(p => ({ ...p, facts: updated }))} onRestartIntake={() => setPhase("chat")} />,
   };
 
   return (
