@@ -368,7 +368,28 @@ function IntakeChat({ facts, onDone }) {
     setLoading(false);
 
     if (count >= 13) {
-      setTimeout(() => onDone({ facts, conversation: newMessages }), 3000);
+      setTimeout(async () => {
+        // Genereer persoonlijkheidsportret op basis van het gesprek + alle profieldata
+        const zodiac = getZodiac(facts.birthdate);
+        const age = facts.birthdate ? Math.floor((Date.now() - new Date(facts.birthdate)) / (365.25 * 86400000)) : null;
+        const portraitPrompt = `Op basis van dit intakegesprek, schrijf een persoonlijk portret van ${facts.name} in de derde persoon. Schrijf warm, inzichtelijk en concreet — alsof je het aan een collega-coach vertelt die haar gaat begeleiden.
+
+Verwerk hierin:
+- Wie ze is: persoonlijkheid, energie, kernkwaliteiten
+- Haar leefsituatie: werk, relaties, thuis
+- Kernpatronen: wat herhaalt zich, wat houdt haar tegen
+- Wat ze zoekt en nodig heeft
+- Haar Human Design type (${facts.hdtype || "onbekend"}) en wat dat betekent voor hoe zij werkt en beslist
+- Haar sterrenbeeld (${zodiac || "onbekend"}) als extra kleur
+${age ? `- Ze is ${age} jaar` : ""}
+${facts.birthplace ? `- Opgegroeid in/rond ${facts.birthplace}` : ""}
+
+Schrijf in het Nederlands. Max 450 woorden. Geen kopjes, gewoon doorlopende tekst. Eindig niet met een vraag.`;
+
+        const allMessages = newMessages.map(m => ({ role: m.from === "user" ? "user" : "assistant", content: m.text }));
+        const portrait = await askLola(allMessages, portraitPrompt);
+        onDone({ facts, conversation: newMessages, personality_profile: portrait });
+      }, 3000);
     }
   }
 
@@ -1000,7 +1021,13 @@ function LolaScreen({ profile, user }) {
 
     return `Je bent Lola, een warme maar eerlijke persoonlijke levenscoach voor vrouwen. Je hebt een doorlopend gesprek met haar — je kent haar goed en bouwt voort op alles wat eerder is gezegd.
 
-── PROFIEL ──
+── WIE ZE IS ──
+${facts.personality_profile
+  ? facts.personality_profile
+  : `Naam: ${facts.name || "onbekend"} | Sterrenbeeld: ${getZodiac(facts.birthdate) || "?"} | HD: ${facts.hdtype || "?"} profiel ${facts.hdprofile || "?"} autoriteit ${facts.hdauthority || "?"}`
+}
+
+── FEITEN ──
 Naam: ${facts.name || "onbekend"}
 Leeftijd: ${facts.birthdate ? Math.floor((Date.now() - new Date(facts.birthdate)) / (365.25 * 86400000)) + " jaar" : "onbekend"}
 Sterrenbeeld: ${getZodiac(facts.birthdate) || "onbekend"}
@@ -1830,9 +1857,38 @@ function ProfileScreen({ profile, user, onProfileUpdated }) {
     cyclelength: facts.cyclelength || "28–32 dagen",
     lastperiod: facts.lastperiod || "",
   });
+  const [portrait, setPortrait] = useState(facts.personality_profile || "");
+  const [regenerating, setRegenerating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const set = (k, v) => { setForm(p => ({ ...p, [k]: v })); setSaved(false); };
+
+  async function regeneratePortrait() {
+    setRegenerating(true);
+    const zodiac = getZodiac(form.birthdate);
+    const age = form.birthdate ? Math.floor((Date.now() - new Date(form.birthdate)) / (365.25 * 86400000)) : null;
+    const prompt = `Schrijf een persoonlijk portret van ${form.name} in de derde persoon, op basis van haar profielgegevens. Schrijf warm, inzichtelijk en concreet.
+
+Profielgegevens:
+- Naam: ${form.name}
+- Leeftijd: ${age ? age + " jaar" : "onbekend"}
+- Geboorteplaats: ${form.birthplace || "onbekend"}
+- Sterrenbeeld: ${zodiac || "onbekend"}
+- Human Design type: ${form.hdtype || "onbekend"}
+- HD Profiel: ${form.hdprofile || "onbekend"}
+- HD Autoriteit: ${form.hdauthority || "onbekend"}
+- Cycluslengte: ${form.cyclelength || "onbekend"}
+${portrait ? `\nHuidig portret (gebruik dit als basis, vul aan of pas aan):\n${portrait}` : ""}
+
+Schrijf in het Nederlands. Max 450 woorden. Doorlopende tekst, geen kopjes. Verwerk HD, sterrenbeeld en cyclus als context voor wie ze is.`;
+
+    const newPortrait = await askLola([{ role: "user", content: prompt }],
+      "Je bent Lola, een persoonlijke coach. Schrijf op basis van de gegeven informatie een portret. Geen vragen, geen kopjes. Gewoon een helder, warm beschrijvend portret in het Nederlands."
+    );
+    setPortrait(newPortrait);
+    setSaved(false);
+    setRegenerating(false);
+  }
 
   const zodiac = getZodiac(form.birthdate);
   const age = form.birthdate ? Math.floor((Date.now() - new Date(form.birthdate)) / (365.25 * 86400000)) : null;
@@ -1842,8 +1898,8 @@ function ProfileScreen({ profile, user, onProfileUpdated }) {
 
   async function save() {
     setSaving(true);
-    await supabase.from("profiles").upsert({ id: user.id, ...form });
-    onProfileUpdated({ ...facts, ...form });
+    await supabase.from("profiles").upsert({ id: user.id, ...form, personality_profile: portrait });
+    onProfileUpdated({ ...facts, ...form, personality_profile: portrait });
     setSaving(false);
     setSaved(true);
   }
@@ -1867,6 +1923,35 @@ function ProfileScreen({ profile, user, onProfileUpdated }) {
           </div>}
         </div>
       )}
+
+      <Card style={{ background: COLORS.cream }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <Label>Lola's portret van jou</Label>
+          <button onClick={regeneratePortrait} disabled={regenerating} style={{ background: "none", border: `1px solid ${COLORS.roseBorder}`, borderRadius: 20, padding: "5px 12px", fontSize: 11, color: COLORS.rose, cursor: "pointer", fontFamily: "inherit" }}>
+            {regenerating ? "Schrijven..." : "↺ Herschrijven"}
+          </button>
+        </div>
+        <p style={{ fontSize: 11, color: COLORS.muted, marginBottom: 10, lineHeight: 1.5 }}>
+          Dit is wat Lola onthoudt over wie jij bent. Je kunt het zelf aanpassen — bijvoorbeeld als je werk of relatiestatus verandert.
+        </p>
+        {portrait ? (
+          <textarea
+            value={portrait}
+            onChange={e => { setPortrait(e.target.value); setSaved(false); }}
+            rows={10}
+            style={{ width: "100%", border: `1px solid ${COLORS.roseBorder}`, borderRadius: 14, padding: "12px 14px", fontSize: 13, fontFamily: "inherit", color: COLORS.text, background: COLORS.white, resize: "vertical", outline: "none", boxSizing: "border-box", lineHeight: 1.7 }}
+          />
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-start" }}>
+            <p style={{ fontSize: 13, color: COLORS.muted, lineHeight: 1.6 }}>
+              Nog geen portret. Doe de intake om er een te genereren, of laat Lola er nu een schrijven op basis van je profielgegevens.
+            </p>
+            <button onClick={regeneratePortrait} disabled={regenerating} style={{ padding: "10px 20px", borderRadius: 20, background: COLORS.rose, border: "none", color: COLORS.white, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
+              {regenerating ? "Schrijven..." : "✦ Portret laten schrijven"}
+            </button>
+          </div>
+        )}
+      </Card>
 
       <Card>
         <Label>Persoonlijk</Label>
@@ -2041,7 +2126,13 @@ onSkip={async () => {
             <span style={{ fontSize: 16, color: COLORS.rose }}>✦</span>
             <span style={{ fontSize: 18, fontWeight: 600, color: COLORS.text, letterSpacing: "-0.02em" }}>lola</span>
           </div>
-          <IntakeChat facts={profile.facts} onDone={(fullProfile) => { setProfile(fullProfile); setPhase("welcome"); }} />
+          <IntakeChat facts={profile.facts} onDone={async (fullProfile) => {
+            if (fullProfile.personality_profile && user) {
+              await supabase.from("profiles").update({ personality_profile: fullProfile.personality_profile }).eq("id", user.id);
+            }
+            setProfile(fullProfile);
+            setPhase("welcome");
+          }} />
         </div>
       </div>
     );
