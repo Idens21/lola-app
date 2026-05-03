@@ -486,6 +486,7 @@ function HomeScreen({ profile, onCheckin, onGoToLola, user, onPeriodLogged }) {
   const [loggingPeriod, setLoggingPeriod] = useState(false);
   const [periodLogged, setPeriodLogged] = useState(false);
   const [todayCheckin, setTodayCheckin] = useState(null);
+  const [todayAvond, setTodayAvond] = useState(null);
   const [todayFood, setTodayFood] = useState([]);
   const [recentCheckins, setRecentCheckins] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
@@ -497,13 +498,17 @@ function HomeScreen({ profile, onCheckin, onGoToLola, user, onPeriodLogged }) {
     Promise.all([
       supabase.from("checkins").select("*").eq("user_id", user.id)
         .gte("created_at", start.toISOString()).lte("created_at", end.toISOString())
-        .eq("type", "ochtend").maybeSingle(),
+        .eq("type", "ochtend").order("created_at", { ascending: false }).limit(1),
+      supabase.from("checkins").select("*").eq("user_id", user.id)
+        .gte("created_at", start.toISOString()).lte("created_at", end.toISOString())
+        .eq("type", "avond").order("created_at", { ascending: false }).limit(1),
       supabase.from("food_logs").select("*").eq("user_id", user.id)
         .gte("created_at", start.toISOString()).lte("created_at", end.toISOString()),
       supabase.from("checkins").select("energy,slept,wake_mood,created_at").eq("user_id", user.id)
         .order("created_at", { ascending: false }).limit(7),
-    ]).then(([{ data: ci }, { data: fl }, { data: rc }]) => {
-      setTodayCheckin(ci);
+    ]).then(([{ data: ci }, { data: ai }, { data: fl }, { data: rc }]) => {
+      setTodayCheckin(ci?.[0] || null);
+      setTodayAvond(ai?.[0] || null);
       setTodayFood(fl || []);
       setRecentCheckins(rc || []);
       setLoadingData(false);
@@ -564,12 +569,13 @@ function HomeScreen({ profile, onCheckin, onGoToLola, user, onPeriodLogged }) {
         </button>
       </Card>
 
+      {/* Ochtend check-in */}
       <Card>
         {todayCheckin ? (
           <>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <Label>Ochtend check-in gedaan ✦</Label>
-              <button onClick={onCheckin} style={{ background: "none", border: `1px solid ${COLORS.roseBorder}`, borderRadius: 20, padding: "4px 12px", fontSize: 11, color: COLORS.muted, cursor: "pointer", fontFamily: "inherit" }}>Wijzigen</button>
+              <Label>Ochtend check-in ✦</Label>
+              <button onClick={() => onCheckin("ochtend")} style={{ background: "none", border: `1px solid ${COLORS.roseBorder}`, borderRadius: 20, padding: "4px 12px", fontSize: 11, color: COLORS.muted, cursor: "pointer", fontFamily: "inherit" }}>Wijzigen</button>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {todayCheckin.wake_mood !== null && <span style={{ fontSize: 12, background: COLORS.roseLight, border: `0.5px solid ${COLORS.roseBorder}`, borderRadius: 20, padding: "4px 12px", color: COLORS.text }}>{WAKE_MOODS[todayCheckin.wake_mood]} {WAKE_LABELS[todayCheckin.wake_mood]}</span>}
@@ -577,11 +583,6 @@ function HomeScreen({ profile, onCheckin, onGoToLola, user, onPeriodLogged }) {
               {todayCheckin.slept && <span style={{ fontSize: 12, background: COLORS.roseLight, border: `0.5px solid ${COLORS.roseBorder}`, borderRadius: 20, padding: "4px 12px", color: COLORS.text }}>{todayCheckin.slept}</span>}
             </div>
             {todayCheckin.intention && <p style={{ fontSize: 12, color: COLORS.muted, fontStyle: "italic", marginTop: 8 }}>"{todayCheckin.intention}"</p>}
-            {hour >= 18 && (
-              <button onClick={() => onCheckin("avond")} style={{ width: "100%", marginTop: 12, padding: "12px", borderRadius: 24, background: COLORS.lavender, border: `1px solid ${COLORS.lavenderBorder}`, color: COLORS.text, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
-                Avond check-in starten →
-              </button>
-            )}
           </>
         ) : (
           <>
@@ -589,17 +590,44 @@ function HomeScreen({ profile, onCheckin, onGoToLola, user, onPeriodLogged }) {
             <div style={{ fontSize: 15, fontWeight: 500, color: COLORS.text, marginBottom: 12, marginTop: 4 }}>Hoe ben je wakker geworden?</div>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               {WAKE_MOODS.map((mood, i) => (
-                <button key={i} onClick={onCheckin} style={{ width: 48, height: 48, borderRadius: "50%", border: `1.5px solid ${COLORS.roseBorder}`, background: COLORS.white, fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <button key={i} onClick={() => onCheckin("ochtend")} style={{ width: 48, height: 48, borderRadius: "50%", border: `1.5px solid ${COLORS.roseBorder}`, background: COLORS.white, fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   {mood}
                 </button>
               ))}
             </div>
-            <button onClick={onCheckin} style={{ width: "100%", marginTop: 14, padding: "13px", borderRadius: 24, background: COLORS.rose, border: "none", color: COLORS.white, fontSize: 14, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
-              Start check-in →
+            <button onClick={() => onCheckin("ochtend")} style={{ width: "100%", marginTop: 14, padding: "13px", borderRadius: 24, background: COLORS.rose, border: "none", color: COLORS.white, fontSize: 14, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
+              Start ochtend check-in →
             </button>
           </>
         )}
       </Card>
+
+      {/* Avond check-in — zichtbaar na 18:00 */}
+      {hour >= 18 && (
+        <Card style={{ background: COLORS.lavender, border: `0.5px solid ${COLORS.lavenderBorder}` }}>
+          {todayAvond ? (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <Label>Avond check-in ✦</Label>
+                <button onClick={() => onCheckin("avond")} style={{ background: "none", border: `1px solid ${COLORS.lavenderBorder}`, borderRadius: 20, padding: "4px 12px", fontSize: 11, color: COLORS.muted, cursor: "pointer", fontFamily: "inherit" }}>Wijzigen</button>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {todayAvond.day_rating && <span style={{ fontSize: 12, background: "rgba(255,255,255,0.6)", border: `0.5px solid ${COLORS.lavenderBorder}`, borderRadius: 20, padding: "4px 12px", color: COLORS.text }}>Dag: {todayAvond.day_rating}/5</span>}
+                {todayAvond.moved !== null && <span style={{ fontSize: 12, background: "rgba(255,255,255,0.6)", border: `0.5px solid ${COLORS.lavenderBorder}`, borderRadius: 20, padding: "4px 12px", color: COLORS.text }}>{todayAvond.moved ? "Bewogen ✓" : "Niet bewogen"}</span>}
+              </div>
+              {todayAvond.gratitude && <p style={{ fontSize: 12, color: COLORS.text, fontStyle: "italic", marginTop: 8 }}>"{todayAvond.gratitude}"</p>}
+            </>
+          ) : (
+            <>
+              <Label>Avond check-in</Label>
+              <div style={{ fontSize: 13, color: COLORS.text, marginTop: 4, marginBottom: 12 }}>Sluit je dag af met Lola</div>
+              <button onClick={() => onCheckin("avond")} style={{ width: "100%", padding: "13px", borderRadius: 24, background: "rgba(255,255,255,0.5)", border: `1.5px solid ${COLORS.lavenderBorder}`, color: COLORS.text, fontSize: 14, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
+                Start avond check-in →
+              </button>
+            </>
+          )}
+        </Card>
+      )}
 
       <Card>
         <Label>Voeding vandaag</Label>
@@ -644,11 +672,18 @@ function CheckInScreen({ onDone, user, checkinType = "ochtend" }) {
   const [existing, setExisting] = useState(null);
   const [editMode, setEditMode] = useState(false);
   const [loading, setLoading] = useState(true);
+  // Ochtend velden
   const [wakeMood, setWakeMood] = useState(null);
   const [energy, setEnergy] = useState(null);
   const [slept, setSlept] = useState("");
   const [intention, setIntention] = useState("");
   const [note, setNote] = useState("");
+  // Avond velden
+  const [dayRating, setDayRating] = useState(null);
+  const [moved, setMoved] = useState(null);
+  const [movementNote, setMovementNote] = useState("");
+  const [gratitude, setGratitude] = useState("");
+  const [release, setRelease] = useState("");
   const [submitted, setSubmitted] = useState(false);
 
   useEffect(() => {
@@ -657,15 +692,23 @@ function CheckInScreen({ onDone, user, checkinType = "ochtend" }) {
     const end = new Date(); end.setHours(23, 59, 59, 999);
     supabase.from("checkins").select("*").eq("user_id", user.id)
       .gte("created_at", start.toISOString()).lte("created_at", end.toISOString())
-      .eq("type", checkinType).maybeSingle()
+      .eq("type", checkinType).order("created_at", { ascending: false }).limit(1)
       .then(({ data }) => {
-        if (data) {
-          setExisting(data);
-          setWakeMood(data.wake_mood);
-          setEnergy(data.energy);
-          setSlept(data.slept || "");
-          setIntention(data.intention || "");
-          setNote(data.note || "");
+        const record = data?.[0] || null;
+        if (record) {
+          setExisting(record);
+          // Ochtend
+          setWakeMood(record.wake_mood ?? null);
+          setEnergy(record.energy ?? null);
+          setSlept(record.slept || "");
+          setIntention(record.intention || "");
+          setNote(record.note || "");
+          // Avond
+          setDayRating(record.day_rating ?? null);
+          setMoved(record.moved ?? null);
+          setMovementNote(record.movement_note || "");
+          setGratitude(record.gratitude || "");
+          setRelease(record.release || "");
         } else {
           setEditMode(true);
         }
@@ -675,7 +718,9 @@ function CheckInScreen({ onDone, user, checkinType = "ochtend" }) {
 
   async function save() {
     if (!user) { setSubmitted(true); return; }
-    const payload = { user_id: user.id, type: checkinType, wake_mood: wakeMood, energy, slept, intention, note };
+    const payload = checkinType === "ochtend"
+      ? { user_id: user.id, type: "ochtend", wake_mood: wakeMood, energy, slept, intention, note }
+      : { user_id: user.id, type: "avond", day_rating: dayRating, moved, movement_note: movementNote, gratitude, release };
     if (existing?.id) {
       await supabase.from("checkins").update(payload).eq("id", existing.id);
     } else {
@@ -704,111 +749,124 @@ function CheckInScreen({ onDone, user, checkinType = "ochtend" }) {
     );
   }
 
-  // Bestaande check-in weergeven (leesmodus)
+  const isAvond = checkinType === "avond";
+  const accentBg = isAvond ? COLORS.lavender : COLORS.roseLight;
+  const accentBorder = isAvond ? COLORS.lavenderBorder : COLORS.roseBorder;
+  const accentText = isAvond ? COLORS.text : COLORS.roseDark;
+  const btnColor = isAvond ? "#9B8EC4" : COLORS.rose;
+
+  // Leesmodus
   if (existing && !editMode) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
-            <div style={{ fontSize: 22, fontWeight: 500, color: COLORS.text }}>Ochtend check-in ✦</div>
+            <div style={{ fontSize: 22, fontWeight: 500, color: COLORS.text }}>{isAvond ? "Avond" : "Ochtend"} check-in ✦</div>
             <div style={{ fontSize: 13, color: COLORS.muted, marginTop: 2 }}>Gelogd vandaag</div>
           </div>
-          <button onClick={() => setEditMode(true)} style={{ background: COLORS.roseLight, border: `1px solid ${COLORS.roseBorder}`, borderRadius: 20, padding: "8px 18px", fontSize: 13, color: COLORS.roseDark, cursor: "pointer", fontFamily: "inherit", fontWeight: 500 }}>Wijzigen</button>
+          <button onClick={() => setEditMode(true)} style={{ background: accentBg, border: `1px solid ${accentBorder}`, borderRadius: 20, padding: "8px 18px", fontSize: 13, color: accentText, cursor: "pointer", fontFamily: "inherit", fontWeight: 500 }}>Wijzigen</button>
         </div>
         <Card>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {existing.wake_mood !== null && (
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ fontSize: 13, color: COLORS.muted }}>Stemming bij opstaan</span>
-                <span style={{ fontSize: 13, color: COLORS.text, fontWeight: 500 }}>{WAKE_MOODS[existing.wake_mood]} {WAKE_LABELS[existing.wake_mood]}</span>
-              </div>
-            )}
-            {existing.energy && (
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ fontSize: 13, color: COLORS.muted }}>Energie</span>
-                <span style={{ fontSize: 13, color: COLORS.text, fontWeight: 500 }}>{existing.energy}/5</span>
-              </div>
-            )}
-            {existing.slept && (
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ fontSize: 13, color: COLORS.muted }}>Geslapen</span>
-                <span style={{ fontSize: 13, color: COLORS.text, fontWeight: 500 }}>{existing.slept}</span>
-              </div>
-            )}
-            {existing.intention && (
-              <div style={{ paddingTop: 8, borderTop: `0.5px solid ${COLORS.roseBorder}` }}>
-                <div style={{ fontSize: 11, color: COLORS.muted, marginBottom: 4 }}>Intentie</div>
-                <div style={{ fontSize: 13, color: COLORS.text, fontStyle: "italic" }}>"{existing.intention}"</div>
-              </div>
-            )}
-            {existing.note && (
-              <div style={{ paddingTop: 8, borderTop: `0.5px solid ${COLORS.roseBorder}` }}>
-                <div style={{ fontSize: 11, color: COLORS.muted, marginBottom: 4 }}>Notitie aan Lola</div>
-                <div style={{ fontSize: 13, color: COLORS.text }}>{existing.note}</div>
-              </div>
-            )}
+            {!isAvond && existing.wake_mood !== null && <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ fontSize: 13, color: COLORS.muted }}>Stemming</span><span style={{ fontSize: 13, color: COLORS.text, fontWeight: 500 }}>{WAKE_MOODS[existing.wake_mood]} {WAKE_LABELS[existing.wake_mood]}</span></div>}
+            {!isAvond && existing.energy && <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ fontSize: 13, color: COLORS.muted }}>Energie</span><span style={{ fontSize: 13, color: COLORS.text, fontWeight: 500 }}>{existing.energy}/5</span></div>}
+            {!isAvond && existing.slept && <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ fontSize: 13, color: COLORS.muted }}>Geslapen</span><span style={{ fontSize: 13, color: COLORS.text, fontWeight: 500 }}>{existing.slept}</span></div>}
+            {!isAvond && existing.intention && <div style={{ paddingTop: 8, borderTop: `0.5px solid ${COLORS.roseBorder}` }}><div style={{ fontSize: 11, color: COLORS.muted, marginBottom: 4 }}>Intentie</div><div style={{ fontSize: 13, color: COLORS.text, fontStyle: "italic" }}>"{existing.intention}"</div></div>}
+            {isAvond && existing.day_rating && <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ fontSize: 13, color: COLORS.muted }}>Dag</span><span style={{ fontSize: 13, color: COLORS.text, fontWeight: 500 }}>{existing.day_rating}/5</span></div>}
+            {isAvond && existing.moved !== null && <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ fontSize: 13, color: COLORS.muted }}>Bewogen</span><span style={{ fontSize: 13, color: COLORS.text, fontWeight: 500 }}>{existing.moved ? `Ja${existing.movement_note ? ` — ${existing.movement_note}` : ""}` : "Nee"}</span></div>}
+            {isAvond && existing.gratitude && <div style={{ paddingTop: 8, borderTop: `0.5px solid ${COLORS.roseBorder}` }}><div style={{ fontSize: 11, color: COLORS.muted, marginBottom: 4 }}>Dankbaar voor</div><div style={{ fontSize: 13, color: COLORS.text, fontStyle: "italic" }}>"{existing.gratitude}"</div></div>}
+            {isAvond && existing.release && <div style={{ paddingTop: 8, borderTop: `0.5px solid ${COLORS.roseBorder}` }}><div style={{ fontSize: 11, color: COLORS.muted, marginBottom: 4 }}>Loslaten</div><div style={{ fontSize: 13, color: COLORS.text, fontStyle: "italic" }}>"{existing.release}"</div></div>}
           </div>
         </Card>
-        <button onClick={onDone} style={{ padding: "13px", borderRadius: 24, background: "transparent", border: `1px solid ${COLORS.roseBorder}`, color: COLORS.muted, fontSize: 14, cursor: "pointer", fontFamily: "inherit" }}>
-          Terug naar home
-        </button>
+        <button onClick={onDone} style={{ padding: "13px", borderRadius: 24, background: "transparent", border: `1px solid ${COLORS.roseBorder}`, color: COLORS.muted, fontSize: 14, cursor: "pointer", fontFamily: "inherit" }}>Terug naar home</button>
       </div>
     );
   }
 
-  // Invulformulier (nieuw of bewerken)
+  // Invulformulier
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
       <div>
         <div style={{ fontSize: 22, fontWeight: 500, color: COLORS.text, marginBottom: 4 }}>
-          {existing ? "Check-in wijzigen ✦" : "Ochtend check-in ✦"}
+          {existing ? "Check-in wijzigen ✦" : isAvond ? "Avond check-in ✦" : "Ochtend check-in ✦"}
         </div>
-        <div style={{ fontSize: 13, color: COLORS.muted }}>Neem even 2 minuten voor jezelf</div>
+        <div style={{ fontSize: 13, color: COLORS.muted }}>{isAvond ? "Sluit je dag af met Lola" : "Neem even 2 minuten voor jezelf"}</div>
       </div>
-      <div style={{ background: COLORS.lavender, borderRadius: 20, padding: "16px 18px", border: `0.5px solid ${COLORS.lavenderBorder}` }}>
-        <div style={{ fontSize: 10, color: "#9B8EC4", fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 8 }}>Gedachte van de dag</div>
-        <p style={{ fontSize: 13, color: COLORS.text, lineHeight: 1.7, fontStyle: "italic", margin: 0 }}>"{DAILY_THOUGHT}"</p>
-      </div>
-      <Card>
-        <Label>Hoe ben je wakker geworden?</Label>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-          {WAKE_MOODS.map((m, i) => (
-            <button key={i} onClick={() => setWakeMood(i)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, width: 52, padding: "8px 0", borderRadius: 16, border: `1.5px solid ${wakeMood === i ? COLORS.rose : COLORS.roseBorder}`, background: wakeMood === i ? COLORS.roseLight : COLORS.white, cursor: "pointer", fontFamily: "inherit" }}>
-              <span style={{ fontSize: 22 }}>{m}</span>
-              <span style={{ fontSize: 9, color: wakeMood === i ? COLORS.rose : COLORS.muted }}>{WAKE_LABELS[i]}</span>
-            </button>
-          ))}
+
+      {!isAvond && (
+        <div style={{ background: COLORS.lavender, borderRadius: 20, padding: "16px 18px", border: `0.5px solid ${COLORS.lavenderBorder}` }}>
+          <div style={{ fontSize: 10, color: "#9B8EC4", fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 8 }}>Gedachte van de dag</div>
+          <p style={{ fontSize: 13, color: COLORS.text, lineHeight: 1.7, fontStyle: "italic", margin: 0 }}>"{DAILY_THOUGHT}"</p>
         </div>
-      </Card>
-      <Card>
-        <Label>Energieniveau (1–5)</Label>
-        <div style={{ display: "flex", gap: 8 }}>
-          {[1,2,3,4,5].map((n) => (
-            <button key={n} onClick={() => setEnergy(n)} style={{ flex: 1, height: 44, borderRadius: 14, border: `1.5px solid ${energy === n ? COLORS.rose : COLORS.roseBorder}`, background: energy === n ? COLORS.rose : COLORS.white, color: energy === n ? COLORS.white : COLORS.muted, fontSize: 15, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
-              {n}
-            </button>
-          ))}
-        </div>
-      </Card>
-      <Card>
-        <Label>Hoeveel uur geslapen?</Label>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          {["<5 uur","5–6 uur","6–7 uur","7–8 uur","8+ uur"].map((opt) => (
-            <button key={opt} onClick={() => setSlept(opt)} style={{ padding: "8px 16px", borderRadius: 20, border: `1.5px solid ${slept === opt ? COLORS.rose : COLORS.roseBorder}`, background: slept === opt ? COLORS.roseLight : COLORS.white, color: slept === opt ? COLORS.roseDark : COLORS.muted, fontSize: 13, cursor: "pointer", fontFamily: "inherit", fontWeight: slept === opt ? 500 : 400 }}>
-              {opt}
-            </button>
-          ))}
-        </div>
-      </Card>
-      <Card>
-        <Label>Intentie voor vandaag</Label>
-        <textarea value={intention} onChange={(e) => setIntention(e.target.value)} placeholder="Eén woord, één zin, één gevoel dat je wilt vasthouden..." rows={3} style={{ width: "100%", border: `1px solid ${COLORS.roseBorder}`, borderRadius: 14, padding: "12px 14px", fontSize: 13, fontFamily: "inherit", color: COLORS.text, background: COLORS.white, resize: "none", outline: "none", boxSizing: "border-box", lineHeight: 1.6 }} />
-      </Card>
-      <Card>
-        <Label>Iets wat je wilt kwijt aan Lola?</Label>
-        <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optioneel..." rows={2} style={{ width: "100%", border: `1px solid ${COLORS.roseBorder}`, borderRadius: 14, padding: "12px 14px", fontSize: 13, fontFamily: "inherit", color: COLORS.text, background: COLORS.white, resize: "none", outline: "none", boxSizing: "border-box", lineHeight: 1.6 }} />
-      </Card>
-      <button onClick={save} style={{ padding: "15px", borderRadius: 24, background: COLORS.rose, border: "none", color: COLORS.white, fontSize: 15, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
+      )}
+
+      {!isAvond && <>
+        <Card>
+          <Label>Hoe ben je wakker geworden?</Label>
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            {WAKE_MOODS.map((m, i) => (
+              <button key={i} onClick={() => setWakeMood(i)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, width: 52, padding: "8px 0", borderRadius: 16, border: `1.5px solid ${wakeMood === i ? COLORS.rose : COLORS.roseBorder}`, background: wakeMood === i ? COLORS.roseLight : COLORS.white, cursor: "pointer", fontFamily: "inherit" }}>
+                <span style={{ fontSize: 22 }}>{m}</span>
+                <span style={{ fontSize: 9, color: wakeMood === i ? COLORS.rose : COLORS.muted }}>{WAKE_LABELS[i]}</span>
+              </button>
+            ))}
+          </div>
+        </Card>
+        <Card>
+          <Label>Energieniveau (1–5)</Label>
+          <div style={{ display: "flex", gap: 8 }}>
+            {[1,2,3,4,5].map((n) => (
+              <button key={n} onClick={() => setEnergy(n)} style={{ flex: 1, height: 44, borderRadius: 14, border: `1.5px solid ${energy === n ? COLORS.rose : COLORS.roseBorder}`, background: energy === n ? COLORS.rose : COLORS.white, color: energy === n ? COLORS.white : COLORS.muted, fontSize: 15, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>{n}</button>
+            ))}
+          </div>
+        </Card>
+        <Card>
+          <Label>Hoeveel uur geslapen?</Label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {["<5 uur","5–6 uur","6–7 uur","7–8 uur","8+ uur"].map((opt) => (
+              <button key={opt} onClick={() => setSlept(opt)} style={{ padding: "8px 16px", borderRadius: 20, border: `1.5px solid ${slept === opt ? COLORS.rose : COLORS.roseBorder}`, background: slept === opt ? COLORS.roseLight : COLORS.white, color: slept === opt ? COLORS.roseDark : COLORS.muted, fontSize: 13, cursor: "pointer", fontFamily: "inherit", fontWeight: slept === opt ? 500 : 400 }}>{opt}</button>
+            ))}
+          </div>
+        </Card>
+        <Card>
+          <Label>Intentie voor vandaag</Label>
+          <textarea value={intention} onChange={(e) => setIntention(e.target.value)} placeholder="Eén woord, één zin, één gevoel..." rows={3} style={{ width: "100%", border: `1px solid ${COLORS.roseBorder}`, borderRadius: 14, padding: "12px 14px", fontSize: 13, fontFamily: "inherit", color: COLORS.text, background: COLORS.white, resize: "none", outline: "none", boxSizing: "border-box", lineHeight: 1.6 }} />
+        </Card>
+        <Card>
+          <Label>Iets wat je wilt kwijt aan Lola?</Label>
+          <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optioneel..." rows={2} style={{ width: "100%", border: `1px solid ${COLORS.roseBorder}`, borderRadius: 14, padding: "12px 14px", fontSize: 13, fontFamily: "inherit", color: COLORS.text, background: COLORS.white, resize: "none", outline: "none", boxSizing: "border-box", lineHeight: 1.6 }} />
+        </Card>
+      </>}
+
+      {isAvond && <>
+        <Card>
+          <Label>Hoe was je dag? (1–5)</Label>
+          <div style={{ display: "flex", gap: 8 }}>
+            {[1,2,3,4,5].map((n) => (
+              <button key={n} onClick={() => setDayRating(n)} style={{ flex: 1, height: 44, borderRadius: 14, border: `1.5px solid ${dayRating === n ? btnColor : COLORS.roseBorder}`, background: dayRating === n ? btnColor : COLORS.white, color: dayRating === n ? COLORS.white : COLORS.muted, fontSize: 15, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>{n}</button>
+            ))}
+          </div>
+        </Card>
+        <Card>
+          <Label>Bewogen vandaag?</Label>
+          <div style={{ display: "flex", gap: 10, marginBottom: moved ? 12 : 0 }}>
+            {[["Ja", true], ["Nee", false]].map(([lbl, val]) => (
+              <button key={lbl} onClick={() => setMoved(val)} style={{ flex: 1, padding: "11px", borderRadius: 14, border: `1.5px solid ${moved === val ? btnColor : COLORS.roseBorder}`, background: moved === val ? btnColor : COLORS.white, color: moved === val ? COLORS.white : COLORS.muted, fontSize: 14, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>{lbl}</button>
+            ))}
+          </div>
+          {moved && <input type="text" value={movementNote} onChange={e => setMovementNote(e.target.value)} placeholder="Wat en hoe lang? (bijv. 30 min wandelen)" style={{ width: "100%", border: `1px solid ${COLORS.roseBorder}`, borderRadius: 12, padding: "10px 14px", fontSize: 13, fontFamily: "inherit", color: COLORS.text, outline: "none", boxSizing: "border-box", marginTop: 8 }} />}
+        </Card>
+        <Card>
+          <Label>Waar ben je dankbaar voor vandaag?</Label>
+          <textarea value={gratitude} onChange={e => setGratitude(e.target.value)} placeholder="Klein of groot..." rows={2} style={{ width: "100%", border: `1px solid ${COLORS.roseBorder}`, borderRadius: 14, padding: "12px 14px", fontSize: 13, fontFamily: "inherit", color: COLORS.text, background: COLORS.white, resize: "none", outline: "none", boxSizing: "border-box", lineHeight: 1.6 }} />
+        </Card>
+        <Card>
+          <Label>Wat wil je loslaten?</Label>
+          <textarea value={release} onChange={e => setRelease(e.target.value)} placeholder="Een gedachte, spanning, verwachting..." rows={2} style={{ width: "100%", border: `1px solid ${COLORS.roseBorder}`, borderRadius: 14, padding: "12px 14px", fontSize: 13, fontFamily: "inherit", color: COLORS.text, background: COLORS.white, resize: "none", outline: "none", boxSizing: "border-box", lineHeight: 1.6 }} />
+        </Card>
+      </>}
+
+      <button onClick={save} style={{ padding: "15px", borderRadius: 24, background: btnColor, border: "none", color: COLORS.white, fontSize: 15, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
         {existing ? "Wijzigingen opslaan ✦" : "Verstuur naar Lola ✦"}
       </button>
       {existing && <button onClick={() => setEditMode(false)} style={{ padding: "12px", borderRadius: 24, background: "transparent", border: `1px solid ${COLORS.roseBorder}`, color: COLORS.muted, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Annuleren</button>}
@@ -2069,10 +2127,21 @@ export default function App() {
   const [screen, setScreen] = useState("home");
   const [user, setUser] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [checkinType, setCheckinType] = useState("ochtend");
 
   function goHome() {
     setScreen("home");
     setRefreshKey(k => k + 1);
+  }
+
+  function navigateTo(id) {
+    if (id === "home") setRefreshKey(k => k + 1);
+    setScreen(id);
+  }
+
+  function openCheckin(type = "ochtend") {
+    setCheckinType(type);
+    setScreen("checkin");
   }
 
   useEffect(() => {
@@ -2213,12 +2282,12 @@ onSkip={async () => {
     home: <HomeScreen
       key={refreshKey}
       profile={profile}
-      onCheckin={() => setScreen("checkin")}
+      onCheckin={(type) => openCheckin(type)}
       onGoToLola={() => setScreen("lola")}
       user={user}
       onPeriodLogged={(dateStr) => setProfile(p => ({ ...p, facts: { ...p.facts, lastperiod: dateStr } }))}
     />,
-    checkin: <CheckInScreen user={user} onDone={goHome} />,
+    checkin: <CheckInScreen key={checkinType} user={user} checkinType={checkinType} onDone={goHome} />,
     food: <FoodScreen user={user} />,
     history: <HistoryScreen user={user} profile={profile} />,
     lola: <LolaScreen profile={profile} user={user} />,
@@ -2254,7 +2323,7 @@ onSkip={async () => {
         </div>
         {screenMap[screen]}
       </div>
-      <NavBar active={screen} onChange={setScreen} />
+      <NavBar active={screen} onChange={navigateTo} />
     </div>
   );
 }
