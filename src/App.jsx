@@ -1769,6 +1769,7 @@ function HistoryScreen({ user, profile }) {
   const [viewDate, setViewDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
   const [checkins, setCheckins] = useState([]);
   const [foodLogs, setFoodLogs] = useState([]);
+  const [weightLogs, setWeightLogs] = useState([]);
   const [selectedDay, setSelectedDay] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -1781,180 +1782,248 @@ function HistoryScreen({ user, profile }) {
   useEffect(() => {
     if (!user) return;
     setLoading(true);
-    const from = `${year}-${String(month + 1).padStart(2, "0")}-01`;
-    const to = `${year}-${String(month + 1).padStart(2, "0")}-${String(lastDay.getDate()).padStart(2, "0")}`;
+    const from = new Date(year, month, 1); from.setHours(0,0,0,0);
+    const to = new Date(year, month, lastDay.getDate()); to.setHours(23,59,59,999);
     Promise.all([
-      supabase.from("checkins").select("*").eq("user_id", user.id).gte("created_at", from).lte("created_at", to + "T23:59:59"),
-      supabase.from("food_logs").select("*").eq("user_id", user.id).gte("created_at", from).lte("created_at", to + "T23:59:59"),
-    ]).then(([{ data: ci }, { data: fl }]) => {
+      supabase.from("checkins").select("*").eq("user_id", user.id)
+        .gte("created_at", from.toISOString()).lte("created_at", to.toISOString()),
+      supabase.from("food_logs").select("*").eq("user_id", user.id)
+        .gte("created_at", from.toISOString()).lte("created_at", to.toISOString()),
+      supabase.from("weight_logs").select("*").eq("user_id", user.id)
+        .gte("created_at", from.toISOString()).lte("created_at", to.toISOString()),
+    ]).then(([{ data: ci }, { data: fl }, { data: wl }]) => {
       setCheckins(ci || []);
       setFoodLogs(fl || []);
+      setWeightLogs(wl || []);
       setLoading(false);
     });
   }, [viewDate, user]);
 
-  function dateKey(d) {
-    return new Date(d).toISOString().slice(0, 10);
+  function localDateKey(isoStr) {
+    return new Date(isoStr).toLocaleDateString("en-CA");
   }
 
-  const checkinByDay = {};
-  checkins.forEach(c => { checkinByDay[dateKey(c.created_at)] = c; });
+  // Groepeer per dag — ochtend en avond apart
+  const ochtendByDay = {}, avondByDay = {};
+  checkins.forEach(c => {
+    const k = localDateKey(c.created_at);
+    if (c.type === "avond") avondByDay[k] = c;
+    else ochtendByDay[k] = c;
+  });
 
   const foodByDay = {};
   foodLogs.forEach(f => {
-    const k = dateKey(f.created_at);
+    const k = localDateKey(f.created_at);
     if (!foodByDay[k]) foodByDay[k] = [];
     foodByDay[k].push(f);
   });
 
+  const weightByDay = {};
+  weightLogs.forEach(w => { weightByDay[localDateKey(w.created_at)] = w.weight; });
+
   const startOffset = (firstDay.getDay() + 6) % 7;
-  const totalCells = startOffset + lastDay.getDate();
-  const rows = Math.ceil(totalCells / 7);
-  const cells = Array.from({ length: rows * 7 }, (_, i) => {
-    const dayNum = i - startOffset + 1;
-    return dayNum >= 1 && dayNum <= lastDay.getDate() ? dayNum : null;
+  const cells = Array.from({ length: Math.ceil((startOffset + lastDay.getDate()) / 7) * 7 }, (_, i) => {
+    const d = i - startOffset + 1;
+    return d >= 1 && d <= lastDay.getDate() ? d : null;
   });
 
   function dayKey(d) {
     return `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
   }
 
+  const todayKey = today.toLocaleDateString("en-CA");
   const selectedKey = selectedDay ? dayKey(selectedDay) : null;
-  const selectedCheckin = selectedKey ? checkinByDay[selectedKey] : null;
-  const selectedFood = selectedKey ? (foodByDay[selectedKey] || []) : [];
-  const selectedCycle = selectedDay
+  const selOchtend = selectedKey ? ochtendByDay[selectedKey] : null;
+  const selAvond = selectedKey ? avondByDay[selectedKey] : null;
+  const selFood = selectedKey ? (foodByDay[selectedKey] || []) : [];
+  const selWeight = selectedKey ? weightByDay[selectedKey] : null;
+  const selCycle = selectedDay
     ? getCycleInfoForDate(profile?.facts?.lastperiod, profile?.facts?.cyclelength, new Date(year, month, selectedDay))
     : null;
 
-  const WAKE_MOODS_ARR = ["😴", "😔", "😐", "🙂", "✨"];
-  const WAKE_LABELS_ARR = ["Zwaar", "Moeizaam", "Oké", "Fris", "Uitgerust"];
+  const MOODS = ["😴","😔","😐","🙂","✨"];
+  const MOOD_LABELS = ["Zwaar","Moeizaam","Oké","Fris","Uitgerust"];
+
+  const foodTotals = selFood.reduce((a, f) => ({ kcal: a.kcal+(f.kcal||0), protein: a.protein+(f.protein||0), carbs: a.carbs+(f.carbs||0), fat: a.fat+(f.fat||0) }), { kcal:0, protein:0, carbs:0, fat:0 });
+
+  const Row = ({ label, value }) => value ? (
+    <div style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: `0.5px solid ${COLORS.roseBorder}` }}>
+      <span style={{ fontSize: 12, color: COLORS.muted }}>{label}</span>
+      <span style={{ fontSize: 12, color: COLORS.text, fontWeight: 500 }}>{value}</span>
+    </div>
+  ) : null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* Maand navigatie */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <button onClick={() => setViewDate(new Date(year, month - 1, 1))} style={{ background: "none", border: "none", cursor: "pointer", color: COLORS.muted, fontSize: 20, padding: "4px 8px" }}>‹</button>
+        <button onClick={() => { setViewDate(new Date(year, month - 1, 1)); setSelectedDay(null); }} style={{ background: "none", border: "none", cursor: "pointer", color: COLORS.muted, fontSize: 20, padding: "4px 8px" }}>‹</button>
         <div style={{ fontSize: 15, fontWeight: 500, color: COLORS.text, textTransform: "capitalize" }}>{monthLabel}</div>
-        <button onClick={() => setViewDate(new Date(year, month + 1, 1))} disabled={viewDate >= new Date(today.getFullYear(), today.getMonth(), 1)} style={{ background: "none", border: "none", cursor: viewDate >= new Date(today.getFullYear(), today.getMonth(), 1) ? "default" : "pointer", color: viewDate >= new Date(today.getFullYear(), today.getMonth(), 1) ? COLORS.roseBorder : COLORS.muted, fontSize: 20, padding: "4px 8px" }}>›</button>
+        <button onClick={() => { setViewDate(new Date(year, month + 1, 1)); setSelectedDay(null); }} disabled={viewDate >= new Date(today.getFullYear(), today.getMonth(), 1)} style={{ background: "none", border: "none", cursor: "pointer", color: viewDate >= new Date(today.getFullYear(), today.getMonth(), 1) ? COLORS.roseBorder : COLORS.muted, fontSize: 20, padding: "4px 8px" }}>›</button>
       </div>
 
+      {/* Kalender grid */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3 }}>
-        {["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"].map(d => (
+        {["Ma","Di","Wo","Do","Vr","Za","Zo"].map(d => (
           <div key={d} style={{ fontSize: 10, color: COLORS.muted, fontWeight: 500, textAlign: "center", padding: "4px 0" }}>{d}</div>
         ))}
         {cells.map((dayNum, i) => {
           if (!dayNum) return <div key={i} />;
           const key = dayKey(dayNum);
-          const hasCheckin = !!checkinByDay[key];
+          const hasOchtend = !!ochtendByDay[key];
+          const hasAvond = !!avondByDay[key];
           const hasFood = (foodByDay[key] || []).length > 0;
+          const hasWeight = !!weightByDay[key];
           const cycleInfo = getCycleInfoForDate(profile?.facts?.lastperiod, profile?.facts?.cyclelength, new Date(year, month, dayNum));
-          const isToday = key === today.toISOString().slice(0, 10);
+          const isToday = key === todayKey;
           const isSelected = selectedDay === dayNum;
           const isPast = new Date(year, month, dayNum) <= today;
 
           return (
-            <button
-              key={i}
-              onClick={() => isPast && setSelectedDay(selectedDay === dayNum ? null : dayNum)}
-              style={{
-                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                aspectRatio: "1", padding: "2px", borderRadius: 10, cursor: isPast ? "pointer" : "default",
+            <button key={i} onClick={() => isPast && setSelectedDay(selectedDay === dayNum ? null : dayNum)}
+              style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", aspectRatio: "1", padding: "2px", borderRadius: 10, cursor: isPast ? "pointer" : "default",
                 border: isToday ? `1.5px solid ${COLORS.rose}` : isSelected ? `1.5px solid ${COLORS.roseDark}` : "1.5px solid transparent",
-                background: isSelected ? COLORS.roseLight : "transparent",
-                opacity: isPast ? 1 : 0.25,
-                overflow: "hidden",
-              }}
-            >
+                background: isSelected ? COLORS.roseLight : "transparent", opacity: isPast ? 1 : 0.2, overflow: "hidden" }}>
               <div style={{ fontSize: 12, fontWeight: isToday ? 600 : 400, color: isToday ? COLORS.rose : COLORS.text, lineHeight: 1 }}>{dayNum}</div>
-              <div style={{ display: "flex", gap: 2, alignItems: "center", marginTop: 3, flexWrap: "nowrap" }}>
-                {cycleInfo.day && <div style={{ width: 4, height: 4, borderRadius: "50%", background: cycleInfo.phase.color, flexShrink: 0 }} />}
-                {hasCheckin && <div style={{ width: 4, height: 4, borderRadius: "50%", background: COLORS.rose, flexShrink: 0 }} />}
-                {hasFood && <div style={{ width: 4, height: 4, borderRadius: "50%", background: "#A0C4A8", flexShrink: 0 }} />}
+              <div style={{ display: "flex", gap: 1.5, alignItems: "center", marginTop: 3 }}>
+                {cycleInfo.day && <div style={{ width: 4, height: 4, borderRadius: "50%", background: cycleInfo.phase.color }} />}
+                {hasOchtend && <div style={{ width: 4, height: 4, borderRadius: "50%", background: COLORS.rose }} />}
+                {hasAvond && <div style={{ width: 4, height: 4, borderRadius: "50%", background: "#9B8EC4" }} />}
+                {hasFood && <div style={{ width: 4, height: 4, borderRadius: "50%", background: "#A0C4A8" }} />}
+                {hasWeight && <div style={{ width: 4, height: 4, borderRadius: "50%", background: "#E8C4A0" }} />}
               </div>
             </button>
           );
         })}
       </div>
 
-      <div style={{ display: "flex", gap: 12, fontSize: 11, color: COLORS.muted }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{ width: 7, height: 7, borderRadius: "50%", background: COLORS.rose }} />Check-in</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{ width: 7, height: 7, borderRadius: "50%", background: "#A0C4A8" }} />Voeding</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{ width: 7, height: 7, borderRadius: "50%", background: COLORS.roseBorder }} />Cyclus</div>
+      {/* Legende */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, fontSize: 10, color: COLORS.muted }}>
+        {[["Cyclus dag", COLORS.roseBorder], ["🌤 Ochtend", COLORS.rose], ["🌙 Avond", "#9B8EC4"], ["Voeding", "#A0C4A8"], ["Gewicht", "#E8C4A0"]].map(([lbl, col]) => (
+          <div key={lbl} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <div style={{ width: 7, height: 7, borderRadius: "50%", background: col }} />{lbl}
+          </div>
+        ))}
       </div>
 
       {loading && <div style={{ textAlign: "center", color: COLORS.muted, fontSize: 13, padding: 20 }}>Laden...</div>}
 
+      {/* Dagdetail */}
       {selectedDay && !loading && (
-        <Card>
-          <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.roseDark, marginBottom: 12 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {/* Header */}
+          <div style={{ fontSize: 15, fontWeight: 600, color: COLORS.text }}>
             {new Date(year, month, selectedDay).toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long" })}
           </div>
 
-          {selectedCycle?.day && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, padding: "8px 12px", background: COLORS.roseLight, borderRadius: 12, border: `0.5px solid ${COLORS.roseBorder}` }}>
-              <div style={{ width: 8, height: 8, borderRadius: "50%", background: selectedCycle.phase.color }} />
-              <span style={{ fontSize: 12, color: COLORS.text }}>{selectedCycle.phase.name} · Dag {selectedCycle.day}</span>
+          {/* Cyclus */}
+          {selCycle?.day && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: COLORS.roseLight, borderRadius: 12, border: `0.5px solid ${COLORS.roseBorder}` }}>
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: selCycle.phase.color }} />
+              <span style={{ fontSize: 12, color: COLORS.text }}>Dag {selCycle.day} — {selCycle.phase.tip}</span>
             </div>
           )}
 
-          {selectedCheckin ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
-              <Label>Ochtend check-in</Label>
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                {selectedCheckin.wake_mood !== null && (
-                  <div style={{ background: COLORS.roseLight, borderRadius: 10, padding: "6px 12px", fontSize: 12, color: COLORS.text }}>
-                    {WAKE_MOODS_ARR[selectedCheckin.wake_mood]} {WAKE_LABELS_ARR[selectedCheckin.wake_mood]}
-                  </div>
-                )}
-                {selectedCheckin.energy && (
-                  <div style={{ background: COLORS.roseLight, borderRadius: 10, padding: "6px 12px", fontSize: 12, color: COLORS.text }}>
-                    Energie {selectedCheckin.energy}/5
-                  </div>
-                )}
-                {selectedCheckin.slept && (
-                  <div style={{ background: COLORS.roseLight, borderRadius: 10, padding: "6px 12px", fontSize: 12, color: COLORS.text }}>
-                    {selectedCheckin.slept}
-                  </div>
-                )}
+          {/* Gewicht */}
+          {selWeight && (
+            <Card style={{ background: "#FFF8F0" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <Label>Gewicht</Label>
+                <span style={{ fontSize: 18, fontWeight: 600, color: COLORS.text }}>{selWeight} kg</span>
               </div>
-              {selectedCheckin.intention && (
-                <div style={{ fontSize: 12, color: COLORS.muted, fontStyle: "italic", lineHeight: 1.5 }}>
-                  "{selectedCheckin.intention}"
+            </Card>
+          )}
+
+          {/* Ochtend check-in */}
+          {selOchtend ? (
+            <Card>
+              <Label>🌤 Ochtend check-in</Label>
+              <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 0 }}>
+                <Row label="Stemming bij opstaan" value={selOchtend.wake_mood !== null ? `${MOODS[selOchtend.wake_mood]} ${MOOD_LABELS[selOchtend.wake_mood]}` : null} />
+                <Row label="Energie" value={selOchtend.energy ? `${selOchtend.energy}/5 ${"●".repeat(selOchtend.energy)}${"○".repeat(5 - selOchtend.energy)}` : null} />
+                <Row label="Geslapen" value={selOchtend.slept} />
+              </div>
+              {selOchtend.intention && (
+                <div style={{ marginTop: 8, padding: "8px 12px", background: COLORS.roseLight, borderRadius: 10 }}>
+                  <div style={{ fontSize: 10, color: COLORS.muted, marginBottom: 2 }}>Intentie</div>
+                  <div style={{ fontSize: 13, color: COLORS.text, fontStyle: "italic" }}>"{selOchtend.intention}"</div>
                 </div>
               )}
-            </div>
+              {selOchtend.note && (
+                <div style={{ marginTop: 6, fontSize: 12, color: COLORS.muted }}>Notitie: {selOchtend.note}</div>
+              )}
+            </Card>
           ) : (
-            <div style={{ fontSize: 12, color: COLORS.muted, marginBottom: 12 }}>Geen check-in op deze dag.</div>
+            <Card style={{ opacity: 0.6 }}>
+              <div style={{ fontSize: 13, color: COLORS.muted }}>🌤 Geen ochtend check-in op deze dag</div>
+            </Card>
           )}
 
-          {selectedFood.length > 0 ? (
-            <div>
-              <Label>Voeding</Label>
-              <div style={{ display: "flex", gap: 8, marginBottom: 8, marginTop: 4 }}>
-                {["kcal", "protein", "carbs", "fat"].map(k => {
-                  const total = selectedFood.reduce((s, f) => s + (f[k] || 0), 0);
-                  const labels = { kcal: "kcal", protein: "eiwit", carbs: "koolhyd.", fat: "vet" };
-                  return (
-                    <div key={k} style={{ flex: 1, background: COLORS.roseLight, borderRadius: 10, padding: "8px 4px", textAlign: "center" }}>
-                      <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.text }}>{total}{k !== "kcal" ? "g" : ""}</div>
-                      <div style={{ fontSize: 10, color: COLORS.muted }}>{labels[k]}</div>
-                    </div>
-                  );
-                })}
+          {/* Avond check-in */}
+          {selAvond ? (
+            <Card style={{ background: COLORS.lavender, border: `0.5px solid ${COLORS.lavenderBorder}` }}>
+              <Label>🌙 Avond check-in</Label>
+              <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 0 }}>
+                <Row label="Hoe was de dag" value={selAvond.day_rating ? `${selAvond.day_rating}/5 ${"●".repeat(selAvond.day_rating)}${"○".repeat(5 - selAvond.day_rating)}` : null} />
+                <Row label="Bewogen" value={selAvond.moved !== null ? (selAvond.moved ? `Ja${selAvond.movement_note ? ` — ${selAvond.movement_note}` : ""}` : "Nee") : null} />
               </div>
-              {selectedFood.map((f, i) => (
-                <div key={i} style={{ fontSize: 12, color: COLORS.muted, padding: "4px 0", borderBottom: `0.5px solid ${COLORS.roseBorder}` }}>
-                  {f.product_name} <span style={{ color: COLORS.rose }}>{f.kcal} kcal</span>
+              {selAvond.gratitude && (
+                <div style={{ marginTop: 8, padding: "8px 12px", background: "rgba(255,255,255,0.5)", borderRadius: 10 }}>
+                  <div style={{ fontSize: 10, color: COLORS.muted, marginBottom: 2 }}>Dankbaar voor</div>
+                  <div style={{ fontSize: 13, color: COLORS.text, fontStyle: "italic" }}>"{selAvond.gratitude}"</div>
                 </div>
-              ))}
-            </div>
+              )}
+              {selAvond.release && (
+                <div style={{ marginTop: 6, padding: "8px 12px", background: "rgba(255,255,255,0.5)", borderRadius: 10 }}>
+                  <div style={{ fontSize: 10, color: COLORS.muted, marginBottom: 2 }}>Losgelaten</div>
+                  <div style={{ fontSize: 13, color: COLORS.text, fontStyle: "italic" }}>"{selAvond.release}"</div>
+                </div>
+              )}
+            </Card>
+          ) : null}
+
+          {/* Voeding */}
+          {selFood.length > 0 ? (
+            <Card>
+              <Label>Voeding</Label>
+              <div style={{ display: "flex", gap: 8, marginTop: 8, marginBottom: 10 }}>
+                {[["kcal", foodTotals.kcal, COLORS.rose], ["eiwit", `${foodTotals.protein}g`, "#A0C4E8"], ["koolhyd.", `${foodTotals.carbs}g`, "#A0E8C4"], ["vet", `${foodTotals.fat}g`, "#E8C4A0"]].map(([lbl, val, col]) => (
+                  <div key={lbl} style={{ flex: 1, background: COLORS.roseLight, borderRadius: 12, padding: "8px 4px", textAlign: "center" }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: COLORS.text }}>{val}</div>
+                    <div style={{ fontSize: 9, color: COLORS.muted }}>{lbl}</div>
+                  </div>
+                ))}
+              </div>
+              {["ontbijt","lunch","diner","snack"].map(meal => {
+                const items = selFood.filter(f => f.meal === meal);
+                if (!items.length) return null;
+                const mealKcal = items.reduce((s, f) => s + (f.kcal || 0), 0);
+                return (
+                  <div key={meal} style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 11, fontWeight: 500, color: COLORS.muted, textTransform: "capitalize", marginBottom: 4, display: "flex", justifyContent: "space-between" }}>
+                      <span>{meal}</span><span>{mealKcal} kcal</span>
+                    </div>
+                    {items.map((f, i) => (
+                      <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: COLORS.text, padding: "3px 0", borderBottom: `0.5px solid ${COLORS.roseBorder}` }}>
+                        <span>{f.product_name}{f.grams ? ` (${f.grams}g)` : ""}</span>
+                        <span style={{ color: COLORS.rose, fontWeight: 500 }}>{f.kcal} kcal</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </Card>
           ) : (
-            <div style={{ fontSize: 12, color: COLORS.muted }}>Geen voeding gelogd op deze dag.</div>
+            <Card style={{ opacity: 0.6 }}>
+              <div style={{ fontSize: 13, color: COLORS.muted }}>Geen voeding gelogd op deze dag</div>
+            </Card>
           )}
-        </Card>
+        </div>
       )}
     </div>
   );
 }
+
 
 // ── HUMAN DESIGN SCREEN ───────────────────────────────────
 const HD_CENTERS = [
