@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
+import ReactMarkdown from "react-markdown";
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
@@ -1101,7 +1102,24 @@ ${!patterns ? "Onvoldoende data (min. 3 check-ins)." : `Gem. energie 7 dagen: ${
               <div style={{ display: "flex", flexDirection: "column", alignItems: msg.from === "user" ? "flex-end" : "flex-start" }}>
                 {msg.from === "lola" && <div style={{ fontSize: 10, color: COLORS.muted, marginBottom: 3, fontWeight: 500 }}>Lola</div>}
                 <div style={{ maxWidth: "75%", wordBreak: "break-word", padding: "11px 15px", borderRadius: 18, fontSize: 13, lineHeight: 1.6, background: msg.from === "lola" ? COLORS.roseLight : COLORS.rose, color: msg.from === "lola" ? COLORS.text : COLORS.white, borderBottomLeftRadius: msg.from === "lola" ? 4 : 18, borderBottomRightRadius: msg.from === "user" ? 4 : 18, border: msg.from === "lola" ? `0.5px solid ${COLORS.roseBorder}` : "none" }}>
-                  {msg.text}
+                  {msg.from === "lola" ? (
+                    <ReactMarkdown
+                      components={{
+                        p: ({ children }) => <p style={{ margin: "0 0 6px 0" }}>{children}</p>,
+                        strong: ({ children }) => <strong style={{ fontWeight: 600, color: COLORS.roseDark }}>{children}</strong>,
+                        em: ({ children }) => <em style={{ fontStyle: "italic" }}>{children}</em>,
+                        h1: ({ children }) => <div style={{ fontSize: 15, fontWeight: 600, color: COLORS.roseDark, margin: "10px 0 4px" }}>{children}</div>,
+                        h2: ({ children }) => <div style={{ fontSize: 14, fontWeight: 600, color: COLORS.roseDark, margin: "8px 0 4px" }}>{children}</div>,
+                        h3: ({ children }) => <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text, margin: "6px 0 2px" }}>{children}</div>,
+                        ul: ({ children }) => <ul style={{ paddingLeft: 16, margin: "4px 0" }}>{children}</ul>,
+                        ol: ({ children }) => <ol style={{ paddingLeft: 16, margin: "4px 0" }}>{children}</ol>,
+                        li: ({ children }) => <li style={{ marginBottom: 2 }}>{children}</li>,
+                        hr: () => <hr style={{ border: "none", borderTop: `0.5px solid ${COLORS.roseBorder}`, margin: "8px 0" }} />,
+                      }}
+                    >
+                      {msg.text}
+                    </ReactMarkdown>
+                  ) : msg.text}
                 </div>
                 {msg.created_at && (
                   <div style={{ fontSize: 10, color: COLORS.muted, marginTop: 2 }}>
