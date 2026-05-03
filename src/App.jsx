@@ -23,10 +23,10 @@ const COLORS = {
 };
 
 const PHASES = [
-  { name: "Menstruatie", days: "Dag 1–5", color: "#E8A0B4", desc: "Rust en herstel. Je lichaam werkt hard. Zacht bewegen, ijzerrijke voeding." },
-  { name: "Folliculair", days: "Dag 6–13", color: "#A0C4E8", desc: "Energie stijgt. Goed moment voor nieuwe plannen en intensiever bewegen." },
-  { name: "Ovulatoir", days: "Dag 14–16", color: "#A0E8C4", desc: "Piek energie. Sociale connectie, intensief sporten, zichtbaar zijn." },
-  { name: "Luteaal", days: "Dag 17–28", color: "#C4748A", desc: "Naar binnen. Meer behoefte aan koolhydraten en warmte. Zachtheid mag." },
+  { name: "Menstruatie", days: "Dag 1–5", color: "#E8A0B4", label: "Ongesteld", tip: "Je lichaam verdient rust vandaag. Zacht bewegen is genoeg." },
+  { name: "Folliculair", days: "Dag 6–13", color: "#A0C4E8", label: "Opbouwen", tip: "Je energie komt terug. Goed moment voor nieuwe dingen." },
+  { name: "Ovulatoir", days: "Dag 14–16", color: "#A0E8C4", label: "Piek", tip: "Je bent op je sterkst. Gebruik die energie bewust." },
+  { name: "Luteaal", days: "Dag 17–28", color: "#C4748A", label: "Afschalen", tip: "Meer naar binnen. Warmte, rust en zachtheid mogen nu." },
 ];
 
 function getCycleInfoForDate(lastperiod, cyclelength, date) {
@@ -53,6 +53,38 @@ function getCycleInfoForDate(lastperiod, cyclelength, date) {
 
 function getCycleInfo(lastperiod, cyclelength) {
   return getCycleInfoForDate(lastperiod, cyclelength, new Date());
+}
+
+function useSpeech(onResult) {
+  const [listening, setListening] = useState(false);
+  const supported = typeof window !== "undefined" && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+
+  function startListening() {
+    if (!supported) return;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const rec = new SR();
+    rec.lang = "nl-NL";
+    rec.continuous = false;
+    rec.interimResults = false;
+    rec.onstart = () => setListening(true);
+    rec.onend = () => setListening(false);
+    rec.onerror = () => setListening(false);
+    rec.onresult = (e) => onResult(e.results[0][0].transcript);
+    rec.start();
+  }
+
+  return { listening, startListening, supported };
+}
+
+function MicButton({ onResult, style = {} }) {
+  const [input, setInput] = useState("");
+  const { listening, startListening, supported } = useSpeech((text) => onResult(text));
+  if (!supported) return null;
+  return (
+    <button onClick={startListening} disabled={listening} style={{ width: 44, height: 44, borderRadius: "50%", background: listening ? COLORS.rose : COLORS.roseLight, border: `1px solid ${COLORS.roseBorder}`, color: listening ? COLORS.white : COLORS.rose, fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.2s", ...style }}>
+      {listening ? "⏸" : "🎤"}
+    </button>
+  );
 }
 
 function getCyclePrediction(lastperiod, cyclelength) {
@@ -473,9 +505,10 @@ Schrijf in het Nederlands. Max 450 woorden. Geen kopjes, gewoon doorlopende teks
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
           placeholder="Typ je antwoord..."
-          style={{ flex: 1, padding: "12px 16px", borderRadius: 24, border: `1px solid ${COLORS.roseBorder}`, background: COLORS.white, color: COLORS.text, fontSize: 14, fontFamily: "inherit", outline: "none" }}
+          style={{ flex: 1, minWidth: 0, padding: "12px 16px", borderRadius: 24, border: `1px solid ${COLORS.roseBorder}`, background: COLORS.white, color: COLORS.text, fontSize: 14, fontFamily: "inherit", outline: "none" }}
         />
-        <button onClick={send} disabled={loading} style={{ width: 46, height: 46, borderRadius: "50%", background: loading ? COLORS.roseBorder : COLORS.rose, border: "none", cursor: loading ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <MicButton onResult={(text) => setInput(prev => prev ? prev + " " + text : text)} />
+        <button onClick={send} disabled={loading} style={{ width: 46, height: 46, borderRadius: "50%", background: loading ? COLORS.roseBorder : COLORS.rose, border: "none", cursor: loading ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <path d="M3 8h10M8 3l5 5-5 5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
@@ -582,8 +615,8 @@ function HomeScreen({ profile, onCheckin, onGoToLola, user, onPeriodLogged }) {
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{ width: 10, height: 10, borderRadius: "50%", background: phase.color, flexShrink: 0 }} />
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.roseDark }}>{phase.name}{cycleDay ? ` · Dag ${cycleDay}` : ""}</div>
-            <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 2, lineHeight: 1.5 }}>{phase.desc}</div>
+            <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.roseDark }}>{cycleDay ? `Dag ${cycleDay}` : "Cyclus"}</div>
+            <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 2, lineHeight: 1.5 }}>{phase.tip}</div>
           </div>
         </div>
         {(() => {
@@ -724,7 +757,10 @@ function HomeScreen({ profile, onCheckin, onGoToLola, user, onPeriodLogged }) {
 }
 
 // ── CHECK-IN SCREEN ───────────────────────────────────────
-function CheckInScreen({ onDone, user, checkinType = "ochtend" }) {
+function CheckInScreen({ onDone, user, checkinType: initialType = "ochtend" }) {
+  const hour = new Date().getHours();
+  const [activeType, setActiveType] = useState(initialType);
+  const checkinType = activeType;
   const [existing, setExisting] = useState(null);
   const [editMode, setEditMode] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -814,13 +850,25 @@ function CheckInScreen({ onDone, user, checkinType = "ochtend" }) {
   const accentText = isAvond ? COLORS.text : COLORS.roseDark;
   const btnColor = isAvond ? "#9B8EC4" : COLORS.rose;
 
+  const TypeTabs = () => (
+    <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
+      {["ochtend", ...(hour >= 18 ? ["avond"] : [])].map(t => (
+        <button key={t} onClick={() => { setActiveType(t); setExisting(null); setEditMode(false); setSubmitted(false); setLoading(true); }}
+          style={{ flex: 1, padding: "10px", borderRadius: 16, border: `1.5px solid ${activeType === t ? (t === "avond" ? "#9B8EC4" : COLORS.rose) : COLORS.roseBorder}`, background: activeType === t ? (t === "avond" ? COLORS.lavender : COLORS.roseLight) : COLORS.white, color: activeType === t ? (t === "avond" ? "#9B8EC4" : COLORS.rose) : COLORS.muted, fontSize: 13, fontWeight: activeType === t ? 500 : 400, cursor: "pointer", fontFamily: "inherit", textTransform: "capitalize" }}>
+          {t === "ochtend" ? "🌤 Ochtend" : "🌙 Avond"}
+        </button>
+      ))}
+    </div>
+  );
+
   // Leesmodus
   if (existing && !editMode) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <TypeTabs />
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
-            <div style={{ fontSize: 22, fontWeight: 500, color: COLORS.text }}>{isAvond ? "Avond" : "Ochtend"} check-in ✦</div>
+            <div style={{ fontSize: 22, fontWeight: 500, color: COLORS.text }}>{isAvond ? "🌙 Avond" : "🌤 Ochtend"} check-in ✦</div>
             <div style={{ fontSize: 13, color: COLORS.muted, marginTop: 2 }}>Gelogd vandaag</div>
           </div>
           <button onClick={() => setEditMode(true)} style={{ background: accentBg, border: `1px solid ${accentBorder}`, borderRadius: 20, padding: "8px 18px", fontSize: 13, color: accentText, cursor: "pointer", fontFamily: "inherit", fontWeight: 500 }}>Wijzigen</button>
@@ -845,9 +893,10 @@ function CheckInScreen({ onDone, user, checkinType = "ochtend" }) {
   // Invulformulier
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      <TypeTabs />
       <div>
         <div style={{ fontSize: 22, fontWeight: 500, color: COLORS.text, marginBottom: 4 }}>
-          {existing ? "Check-in wijzigen ✦" : isAvond ? "Avond check-in ✦" : "Ochtend check-in ✦"}
+          {existing ? "Wijzigen ✦" : isAvond ? "🌙 Avond check-in ✦" : "🌤 Ochtend check-in ✦"}
         </div>
         <div style={{ fontSize: 13, color: COLORS.muted }}>{isAvond ? "Sluit je dag af met Lola" : "Neem even 2 minuten voor jezelf"}</div>
       </div>
@@ -1293,6 +1342,7 @@ ${!patterns ? "Onvoldoende data (min. 3 check-ins)." : `Gem. energie 7 dagen: ${
 
       <div style={{ display: "flex", gap: 10, paddingTop: 12, borderTop: `0.5px solid ${COLORS.roseBorder}` }}>
         <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()} placeholder="Zeg iets tegen Lola..." style={{ flex: 1, minWidth: 0, padding: "11px 16px", borderRadius: 24, border: `1px solid ${COLORS.roseBorder}`, background: COLORS.white, color: COLORS.text, fontSize: 13, fontFamily: "inherit", outline: "none" }} />
+        <MicButton onResult={(text) => setInput(prev => prev ? prev + " " + text : text)} />
         <button onClick={send} disabled={loading} style={{ width: 44, height: 44, borderRadius: "50%", background: loading ? COLORS.roseBorder : COLORS.rose, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M8 3l5 5-5 5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
         </button>
@@ -1327,9 +1377,10 @@ function FoodScreen({ user }) {
   const [manualFat, setManualFat] = useState("");
   const [manualGrams, setManualGrams] = useState("100");
   const [recentItems, setRecentItems] = useState([]);
-  const [scanning, setScanning] = useState(false);
   const [visionLoading, setVisionLoading] = useState(false);
   const [visionResults, setVisionResults] = useState([]);
+  const [editingItem, setEditingItem] = useState(null); // { meal, index, grams }
+  const [goals, setGoals] = useState({ kcal: 0, protein: 0, fat: 0 });
   const photoRef = useRef(null);
 
   const totals = Object.values(meals).flat().reduce(
@@ -1337,10 +1388,16 @@ function FoodScreen({ user }) {
     { kcal: 0, protein: 0, carbs: 0, fat: 0 }
   );
 
-  // Laad recente items
+  // Laad doelen en recente items
   useEffect(() => {
     if (!user) return;
-    supabase.from("food_logs").select("product_name,kcal,protein,carbs,fat").eq("user_id", user.id)
+    supabase.from("profiles").select("kcal_goal,protein_goal,fat_goal").eq("id", user.id).maybeSingle()
+      .then(({ data }) => { if (data) setGoals({ kcal: data.kcal_goal || 0, protein: data.protein_goal || 0, fat: data.fat_goal || 0 }); });
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    supabase.from("food_logs").select("product_name,kcal,protein,carbs,fat,kcal_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g").eq("user_id", user.id)
       .order("created_at", { ascending: false }).limit(50)
       .then(({ data }) => {
         if (!data) return;
@@ -1421,25 +1478,40 @@ function FoodScreen({ user }) {
 
   async function addProduct(product, gramsAmount = 100) {
     const factor = gramsAmount / 100;
-    const base = { name: product.name, kcal: product.kcal, protein: product.protein, carbs: product.carbs, fat: product.fat };
-    const scaled = { ...base, grams: gramsAmount, kcal: Math.round(product.kcal * factor), protein: Math.round(product.protein * factor), carbs: Math.round(product.carbs * factor), fat: Math.round(product.fat * factor) };
+    // Sla per-100g waarden op voor herberekening
+    const per100 = { kcal: product.kcal, protein: product.protein, carbs: product.carbs, fat: product.fat };
+    const scaled = { name: product.name, brand: product.brand, grams: gramsAmount, per100,
+      kcal: Math.round(per100.kcal * factor), protein: Math.round(per100.protein * factor),
+      carbs: Math.round(per100.carbs * factor), fat: Math.round(per100.fat * factor) };
     setMeals(prev => ({ ...prev, [activeMeal]: [...prev[activeMeal], scaled] }));
     setResults([]); setVisionResults([]); setQuery(""); setSelectedProduct(null);
     if (user) {
       await Promise.all([
-        supabase.from("food_logs").insert({ user_id: user.id, meal: activeMeal, product_name: product.name, kcal: scaled.kcal, protein: scaled.protein, carbs: scaled.carbs, fat: scaled.fat }),
-        saveToSharedDB(base),
+        supabase.from("food_logs").insert({ user_id: user.id, meal: activeMeal, product_name: product.name,
+          grams: gramsAmount, kcal: scaled.kcal, protein: scaled.protein, carbs: scaled.carbs, fat: scaled.fat,
+          kcal_per_100g: per100.kcal, protein_per_100g: per100.protein, carbs_per_100g: per100.carbs, fat_per_100g: per100.fat }),
+        saveToSharedDB({ name: product.name, brand: product.brand || "", ...per100 }),
       ]);
-      // Ververs recente items
       setRecentItems(prev => {
         const filtered = prev.filter(r => r.name !== product.name);
-        return [{ name: product.name, kcal: product.kcal, protein: product.protein, carbs: product.carbs, fat: product.fat, source: "recent" }, ...filtered].slice(0, 8);
+        return [{ name: product.name, ...per100, source: "recent" }, ...filtered].slice(0, 8);
       });
     }
   }
 
+  function updatePortion(meal, index, newGrams) {
+    setMeals(prev => {
+      const updated = [...prev[meal]];
+      const item = updated[index];
+      const factor = newGrams / 100;
+      updated[index] = { ...item, grams: newGrams, kcal: Math.round(item.per100.kcal * factor), protein: Math.round(item.per100.protein * factor), carbs: Math.round(item.per100.carbs * factor), fat: Math.round(item.per100.fat * factor) };
+      return { ...prev, [meal]: updated };
+    });
+  }
+
   function removeProduct(meal, index) {
     setMeals(prev => ({ ...prev, [meal]: prev[meal].filter((_, i) => i !== index) }));
+    if (editingItem?.meal === meal && editingItem?.index === index) setEditingItem(null);
   }
 
   const ProductRow = ({ p, onSelect }) => (
@@ -1456,14 +1528,28 @@ function FoodScreen({ user }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div style={{ fontSize: 22, fontWeight: 500, color: COLORS.text }}>Voeding <span style={{ fontWeight: 300 }}>vandaag</span></div>
 
-      {/* Totalen */}
+      {/* Totalen met voortgang */}
       <div style={{ display: "flex", gap: 8 }}>
-        {[["kcal", totals.kcal], ["eiwit", `${totals.protein}g`], ["koolhyd.", `${totals.carbs}g`], ["vet", `${totals.fat}g`]].map(([lbl, val]) => (
-          <div key={lbl} style={{ flex: 1, background: COLORS.roseLight, borderRadius: 16, padding: "12px 8px", textAlign: "center", border: `0.5px solid ${COLORS.roseBorder}` }}>
-            <div style={{ fontSize: 16, fontWeight: 500, color: COLORS.text }}>{val}</div>
-            <div style={{ fontSize: 10, color: COLORS.muted, marginTop: 3 }}>{lbl}</div>
-          </div>
-        ))}
+        {[
+          { lbl: "kcal", val: totals.kcal, goal: goals.kcal },
+          { lbl: "eiwit", val: `${totals.protein}g`, goal: goals.protein, raw: totals.protein },
+          { lbl: "koolhyd.", val: `${totals.carbs}g`, goal: 0 },
+          { lbl: "vet", val: `${totals.fat}g`, goal: goals.fat, raw: totals.fat },
+        ].map(({ lbl, val, goal, raw }) => {
+          const progress = goal > 0 ? Math.min((raw ?? totals.kcal) / goal, 1) : null;
+          return (
+            <div key={lbl} style={{ flex: 1, background: COLORS.roseLight, borderRadius: 16, padding: "12px 8px", textAlign: "center", border: `0.5px solid ${COLORS.roseBorder}` }}>
+              <div style={{ fontSize: 16, fontWeight: 500, color: COLORS.text }}>{val}</div>
+              <div style={{ fontSize: 10, color: COLORS.muted, marginTop: 3 }}>{lbl}</div>
+              {progress !== null && (
+                <div style={{ marginTop: 5, height: 3, background: "rgba(0,0,0,0.08)", borderRadius: 4, overflow: "hidden" }}>
+                  <div style={{ width: `${progress * 100}%`, height: "100%", background: progress >= 1 ? "#A0E8C4" : COLORS.rose, borderRadius: 4, transition: "width 0.3s" }} />
+                </div>
+              )}
+              {goal > 0 && <div style={{ fontSize: 9, color: COLORS.muted, marginTop: 2 }}>/ {goal}{lbl === "kcal" ? "" : "g"}</div>}
+            </div>
+          );
+        })}
       </div>
 
       {/* Maaltijd selector */}
@@ -1587,18 +1673,43 @@ function FoodScreen({ user }) {
       {["ontbijt", "lunch", "diner", "snack"].map(meal => meals[meal].length > 0 && (
         <Card key={meal}>
           <Label style={{ textTransform: "capitalize" }}>{meal}</Label>
-          {meals[meal].map((p, i) => (
-            <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `0.5px solid ${COLORS.roseBorder}` }}>
-              <div>
-                <div style={{ fontSize: 13, color: COLORS.text }}>{p.name} <span style={{ color: COLORS.muted, fontSize: 11 }}>{p.grams}g</span></div>
-                <div style={{ fontSize: 11, color: COLORS.muted }}>{p.protein}g eiwit · {p.carbs}g koolhyd · {p.fat}g vet</div>
+          {meals[meal].map((p, i) => {
+            const isEditing = editingItem?.meal === meal && editingItem?.index === i;
+            return (
+              <div key={i}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: isEditing ? "none" : `0.5px solid ${COLORS.roseBorder}` }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, color: COLORS.text }}>{p.name} <span style={{ color: COLORS.muted, fontSize: 11 }}>{p.grams}g</span></div>
+                    <div style={{ fontSize: 11, color: COLORS.muted }}>{p.protein}g eiwit · {p.carbs}g koolhyd · {p.fat}g vet</div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 12, color: COLORS.rose, fontWeight: 500 }}>{p.kcal} kcal</span>
+                    {p.per100 && <button onClick={() => setEditingItem(isEditing ? null : { meal, index: i, grams: p.grams })} style={{ background: "none", border: "none", color: COLORS.muted, cursor: "pointer", fontSize: 14, padding: 0 }}>✏️</button>}
+                    <button onClick={() => removeProduct(meal, i)} style={{ background: "none", border: "none", color: COLORS.muted, cursor: "pointer", fontSize: 18, padding: 0, lineHeight: 1 }}>×</button>
+                  </div>
+                </div>
+                {isEditing && p.per100 && (
+                  <div style={{ padding: "10px 0 12px", borderBottom: `0.5px solid ${COLORS.roseBorder}` }}>
+                    <div style={{ fontSize: 11, color: COLORS.muted, marginBottom: 6 }}>Pas grammen aan — macros worden herberekend</div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+                      {QUICK_PORTIONS.map(qp => (
+                        <button key={qp.label} onClick={() => { setEditingItem(e => ({ ...e, grams: qp.grams })); updatePortion(meal, i, qp.grams); }}
+                          style={{ padding: "5px 12px", borderRadius: 20, border: `1.5px solid ${editingItem.grams === qp.grams ? COLORS.rose : COLORS.roseBorder}`, background: editingItem.grams === qp.grams ? COLORS.roseLight : COLORS.white, color: editingItem.grams === qp.grams ? COLORS.rose : COLORS.muted, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>
+                          {qp.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <input type="number" value={editingItem.grams} onChange={e => { const g = Number(e.target.value); setEditingItem(ev => ({ ...ev, grams: g })); updatePortion(meal, i, g); }}
+                        style={{ width: 80, padding: "8px 12px", borderRadius: 12, border: `1px solid ${COLORS.roseBorder}`, fontSize: 13, fontFamily: "inherit", outline: "none" }} />
+                      <span style={{ fontSize: 12, color: COLORS.muted }}>gram · {Math.round(p.per100.kcal * editingItem.grams / 100)} kcal</span>
+                      <button onClick={() => setEditingItem(null)} style={{ marginLeft: "auto", padding: "7px 14px", borderRadius: 20, background: COLORS.rose, border: "none", color: COLORS.white, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>Klaar</button>
+                    </div>
+                  </div>
+                )}
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 12, color: COLORS.rose, fontWeight: 500 }}>{p.kcal} kcal</span>
-                <button onClick={() => removeProduct(meal, i)} style={{ background: "none", border: "none", color: COLORS.muted, cursor: "pointer", fontSize: 18, padding: 0, lineHeight: 1 }}>×</button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </Card>
       ))}
 
@@ -2029,7 +2140,8 @@ function MonthlyGoalsScreen({ user, profile }) {
 
   async function saveGoals(updated) {
     setGoals(updated);
-    await supabase.from("monthly_goals").upsert({ user_id: user.id, month: thisMonth, goals: updated, updated_at: new Date().toISOString() });
+    await supabase.from("monthly_goals")
+      .upsert({ user_id: user.id, month: thisMonth, goals: updated, updated_at: new Date().toISOString() }, { onConflict: "user_id,month" });
   }
 
   async function toggleDay(idx) {
@@ -2249,6 +2361,9 @@ function ProfileScreen({ profile, user, onProfileUpdated, onRestartIntake }) {
     hdauthority: facts.hdauthority || "",
     cyclelength: facts.cyclelength || "28–32 dagen",
     lastperiod: facts.lastperiod || "",
+    kcal_goal: facts.kcal_goal || "",
+    protein_goal: facts.protein_goal || "",
+    fat_goal: facts.fat_goal || "",
   });
   const [portrait, setPortrait] = useState(facts.personality_profile || "");
   const [regenerating, setRegenerating] = useState(false);
@@ -2430,6 +2545,19 @@ Schrijf in het Nederlands. Max 450 woorden. Doorlopende tekst, geen kopjes. Verw
             <label style={{ fontSize: 12, fontWeight: 500, color: COLORS.muted }}>Eerste dag laatste menstruatie</label>
             <input type="date" value={form.lastperiod} onChange={e => set("lastperiod", e.target.value)} style={inputStyle} />
           </div>
+        </div>
+      </Card>
+
+      <Card>
+        <Label>Dagelijkse voedingsdoelen</Label>
+        <p style={{ fontSize: 11, color: COLORS.muted, marginBottom: 10, marginTop: 4, lineHeight: 1.5 }}>Stel doelen in voor de voortgangsbalken in de voedingstracker.</p>
+        <div style={{ display: "flex", gap: 10 }}>
+          {[["kcal_goal","Kcal","bijv. 1800"], ["protein_goal","Eiwit (g)","bijv. 100"], ["fat_goal","Vetten (g)","bijv. 60"]].map(([k, lbl, ph]) => (
+            <div key={k} style={{ flex: 1 }}>
+              <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 500 }}>{lbl}</label>
+              <input type="number" value={form[k]} placeholder={ph} onChange={e => set(k, e.target.value)} style={{ ...inputStyle, marginTop: 4, padding: "9px 12px", fontSize: 13 }} />
+            </div>
+          ))}
         </div>
       </Card>
 
@@ -2653,7 +2781,7 @@ onSkip={async () => {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <div style={{ fontSize: 11, color: COLORS.muted, background: COLORS.roseLight, padding: "4px 12px", borderRadius: 20, border: `0.5px solid ${COLORS.roseBorder}` }}>
-              {cycleDay ? `Dag ${cycleDay} · ` : ""}{currentPhase.name}
+              {cycleDay ? `Dag ${cycleDay}` : "Cyclus"}
             </div>
             <button onClick={() => setScreen("profile")} style={{ width: 32, height: 32, borderRadius: "50%", background: screen === "profile" ? COLORS.rose : COLORS.roseLight, border: `1px solid ${COLORS.roseBorder}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <svg width="14" height="14" viewBox="0 0 22 22" fill="none">
