@@ -215,7 +215,6 @@ function NavBar({ active, onChange }) {
     { id: "checkin", label: "Check-in", icon: <svg viewBox="0 0 22 22" fill="none"><rect x="4" y="6" width="14" height="12" rx="3" stroke="currentColor" strokeWidth="1.5"/><path d="M8 11l2.5 2.5L14 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> },
     { id: "food", label: "Voeding", icon: <svg viewBox="0 0 22 22" fill="none"><path d="M11 18C11 18 5 14 5 9C5 6 7.5 4 11 4C14.5 4 17 6 17 9C17 14 11 18 11 18Z" stroke="currentColor" strokeWidth="1.5"/><line x1="11" y1="18" x2="11" y2="11" stroke="currentColor" strokeWidth="1.5"/></svg> },
     { id: "history", label: "Kalender", icon: <svg viewBox="0 0 22 22" fill="none"><rect x="3" y="5" width="16" height="14" rx="3" stroke="currentColor" strokeWidth="1.5"/><path d="M3 9h16" stroke="currentColor" strokeWidth="1.5"/><path d="M7 3v4M15 3v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="7" cy="13" r="1" fill="currentColor"/><circle cx="11" cy="13" r="1" fill="currentColor"/><circle cx="15" cy="13" r="1" fill="currentColor"/></svg> },
-    { id: "hd", label: "Design", icon: <svg viewBox="0 0 22 22" fill="none"><polygon points="11,3 19,8 19,16 11,21 3,16 3,8" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><circle cx="11" cy="12" r="3" stroke="currentColor" strokeWidth="1.5"/></svg> },
     { id: "lola", label: "Lola", icon: <svg viewBox="0 0 22 22" fill="none"><path d="M11 4l1.5 4.5H17l-3.8 2.8 1.5 4.5L11 13l-3.7 2.8 1.5-4.5L5 8.5h4.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg> },
   ];
   return (
@@ -1868,6 +1867,8 @@ function ProfileScreen({ profile, user, onProfileUpdated }) {
       <button onClick={save} disabled={saving} style={{ padding: "15px", borderRadius: 24, background: saved ? COLORS.softGreen : COLORS.rose, border: saved ? `1px solid ${COLORS.softGreenBorder}` : "none", color: saved ? COLORS.text : COLORS.white, fontSize: 15, fontWeight: 500, cursor: "pointer", fontFamily: "inherit", transition: "background 0.3s" }}>
         {saving ? "Opslaan..." : saved ? "✓ Opgeslagen" : "Profiel opslaan"}
       </button>
+
+      <HumanDesignScreen profile={profile} user={user} />
     </div>
   );
 }
@@ -2018,7 +2019,6 @@ onSkip={async () => {
     checkin: <CheckInScreen user={user} onDone={() => setScreen("home")} />,
     food: <FoodScreen user={user} />,
     history: <HistoryScreen user={user} profile={profile} />,
-    hd: <HumanDesignScreen profile={profile} user={user} />,
     lola: <LolaScreen profile={profile} user={user} />,
     profile: <ProfileScreen profile={profile} user={user} onProfileUpdated={(updated) => setProfile(p => ({ ...p, facts: updated }))} />,
   };
