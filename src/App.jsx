@@ -58,6 +58,48 @@ const WAKE_MOODS = ["😴", "😔", "😐", "🙂", "✨"];
 const WAKE_LABELS = ["Zwaar", "Moeizaam", "Oké", "Fris", "Uitgerust"];
 const DAILY_THOUGHT = "Wat als de vermoeidheid die je voelt geen zwakte is, maar een signaal dat je iets nodig hebt wat je jezelf nog niet gegund hebt?";
 
+function getZodiac(birthdate) {
+  if (!birthdate) return null;
+  const [, m, d] = birthdate.split("-").map(Number);
+  if ((m === 3 && d >= 21) || (m === 4 && d <= 19)) return "Ram ♈";
+  if ((m === 4 && d >= 20) || (m === 5 && d <= 20)) return "Stier ♉";
+  if ((m === 5 && d >= 21) || (m === 6 && d <= 20)) return "Tweelingen ♊";
+  if ((m === 6 && d >= 21) || (m === 7 && d <= 22)) return "Kreeft ♋";
+  if ((m === 7 && d >= 23) || (m === 8 && d <= 22)) return "Leeuw ♌";
+  if ((m === 8 && d >= 23) || (m === 9 && d <= 22)) return "Maagd ♍";
+  if ((m === 9 && d >= 23) || (m === 10 && d <= 22)) return "Weegschaal ♎";
+  if ((m === 10 && d >= 23) || (m === 11 && d <= 21)) return "Schorpioen ♏";
+  if ((m === 11 && d >= 22) || (m === 12 && d <= 21)) return "Boogschutter ♐";
+  if ((m === 12 && d >= 22) || (m === 1 && d <= 19)) return "Steenbok ♑";
+  if ((m === 1 && d >= 20) || (m === 2 && d <= 18)) return "Waterman ♒";
+  return "Vissen ♓";
+}
+
+function generateLolaObservation(checkin, recentCheckins, cycleDay, phase) {
+  const MOODS = ["Zwaar", "Moeizaam", "Oké", "Fris", "Uitgerust"];
+  const lowEnergyStreak = recentCheckins.filter(c => c.energy <= 2).length;
+  const name = "";
+
+  if (checkin) {
+    if (checkin.energy <= 2 && lowEnergyStreak >= 3)
+      return `Je energie is al ${lowEnergyStreak} dagen laag. In de ${phase.name.toLowerCase()} fase is dat niet raar — maar je lichaam vraagt duidelijk iets. Wat geef je jezelf vandaag?`;
+    if (checkin.slept === "<5 uur" || checkin.slept === "5–6 uur")
+      return `Je hebt kort geslapen. Dat kleurt de rest van de dag — wees zacht voor jezelf als het lastiger gaat dan normaal.`;
+    if (checkin.energy >= 4)
+      return `Je energie is goed vandaag ✦ ${phase.name === "Ovulatoir" ? "Perfect moment om zichtbaar te zijn en dingen te bewegen." : "Mooie dag om iets te doen dat echt telt voor jou."}`;
+    if (checkin.intention)
+      return `Je intentie voor vandaag: "${checkin.intention}". Ik houd dat voor je vast.`;
+  }
+
+  if (cycleDay) {
+    if (cycleDay <= 5) return "Je zit in je menstruatiefase. Rust is nu productief — echt.";
+    if (cycleDay >= 12 && cycleDay <= 16) return "Je bent rond je ovulatie. Je energie en helderheid zijn nu op hun piek — gebruik dat.";
+    if (cycleDay >= 24) return `Dag ${cycleDay} van je cyclus. Je luteale fase vraagt meer van je — plan minder, voel meer.`;
+  }
+
+  return "Ik ben er. Hoe is het met je vandaag?";
+}
+
 const API_KEY = import.meta.env.VITE_ANTHROPIC_KEY;
 // ── AUTH SCREEN ───────────────────────────────────────────
 function AuthScreen({ onAuth }) {
@@ -412,14 +454,38 @@ function WelcomeScreen({ profile, onStart }) {
 }
 
 // ── HOME SCREEN ───────────────────────────────────────────
-function HomeScreen({ profile, onCheckin, user, onPeriodLogged }) {
+function HomeScreen({ profile, onCheckin, onGoToLola, user, onPeriodLogged }) {
   const name = profile?.facts?.name || "liefste";
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Goedemorgen" : hour < 18 ? "Goedemiddag" : "Goedenavond";
-  const today = new Date().toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long" });
+  const todayLabel = new Date().toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long" });
+  const todayKey = new Date().toISOString().slice(0, 10);
   const { day: cycleDay, phase } = getCycleInfo(profile?.facts?.lastperiod, profile?.facts?.cyclelength);
+
   const [loggingPeriod, setLoggingPeriod] = useState(false);
   const [periodLogged, setPeriodLogged] = useState(false);
+  const [todayCheckin, setTodayCheckin] = useState(null);
+  const [todayFood, setTodayFood] = useState([]);
+  const [recentCheckins, setRecentCheckins] = useState([]);
+  const [loadingData, setLoadingData] = useState(true);
+
+  useEffect(() => {
+    if (!user) { setLoadingData(false); return; }
+    Promise.all([
+      supabase.from("checkins").select("*").eq("user_id", user.id)
+        .gte("created_at", todayKey + "T00:00:00").lte("created_at", todayKey + "T23:59:59")
+        .eq("type", "ochtend").maybeSingle(),
+      supabase.from("food_logs").select("*").eq("user_id", user.id)
+        .gte("created_at", todayKey + "T00:00:00").lte("created_at", todayKey + "T23:59:59"),
+      supabase.from("checkins").select("energy,slept,wake_mood,created_at").eq("user_id", user.id)
+        .order("created_at", { ascending: false }).limit(7),
+    ]).then(([{ data: ci }, { data: fl }, { data: rc }]) => {
+      setTodayCheckin(ci);
+      setTodayFood(fl || []);
+      setRecentCheckins(rc || []);
+      setLoadingData(false);
+    });
+  }, [user, todayKey]);
 
   async function logNewPeriod() {
     setLoggingPeriod(true);
@@ -430,6 +496,12 @@ function HomeScreen({ profile, onCheckin, user, onPeriodLogged }) {
     if (onPeriodLogged) onPeriodLogged(todayStr);
   }
 
+  const kcal = todayFood.reduce((s, f) => s + (f.kcal || 0), 0);
+  const protein = todayFood.reduce((s, f) => s + (f.protein || 0), 0);
+  const carbs = todayFood.reduce((s, f) => s + (f.carbs || 0), 0);
+  const fat = todayFood.reduce((s, f) => s + (f.fat || 0), 0);
+  const lolaObs = generateLolaObservation(todayCheckin, recentCheckins, cycleDay, phase);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -437,7 +509,7 @@ function HomeScreen({ profile, onCheckin, user, onPeriodLogged }) {
           <div style={{ fontSize: 24, fontWeight: 300, color: COLORS.text, lineHeight: 1.2 }}>
             {greeting},<br /><span style={{ fontWeight: 600 }}>{name}.</span>
           </div>
-          <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 4 }}>{today}</div>
+          <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 4 }}>{todayLabel}</div>
         </div>
         <div style={{ fontSize: 24, color: COLORS.rose }}>✦</div>
       </div>
@@ -461,46 +533,77 @@ function HomeScreen({ profile, onCheckin, user, onPeriodLogged }) {
 
       <Card style={{ background: COLORS.cream, border: `0.5px solid ${COLORS.roseBorder}` }}>
         <Label>Lola zegt</Label>
-        <p style={{ fontSize: 13, color: COLORS.text, lineHeight: 1.7, fontStyle: "italic" }}>
-          "Je bent al 3 dagen moe bij het opstaan. Dat is geen toeval — je lichaam vraagt iets van je. Wat eet je de avond voor het slapen?"
+        <p style={{ fontSize: 13, color: COLORS.text, lineHeight: 1.7, fontStyle: "italic", marginBottom: 10 }}>
+          "{lolaObs}"
         </p>
-      </Card>
-
-      <Card>
-        <Label>Ochtend check-in</Label>
-        <div style={{ fontSize: 15, fontWeight: 500, color: COLORS.text, marginBottom: 12 }}>Hoe ben je wakker geworden?</div>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-          {WAKE_MOODS.map((mood, i) => (
-            <button key={i} onClick={onCheckin} style={{ width: 48, height: 48, borderRadius: "50%", border: `1.5px solid ${COLORS.roseBorder}`, background: COLORS.white, fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              {mood}
-            </button>
-          ))}
-        </div>
-        <button onClick={onCheckin} style={{ width: "100%", marginTop: 14, padding: "13px", borderRadius: 24, background: COLORS.rose, border: "none", color: COLORS.white, fontSize: 14, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
-          Start check-in →
+        <button onClick={onGoToLola} style={{ background: "none", border: `1px solid ${COLORS.roseBorder}`, borderRadius: 20, padding: "6px 16px", fontSize: 12, color: COLORS.rose, cursor: "pointer", fontFamily: "inherit" }}>
+          Vertel Lola →
         </button>
       </Card>
 
       <Card>
-        <Label>Voeding vandaag</Label>
-        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-          {[["1.240", "kcal"], ["68g", "proteïne"], ["142g", "koolhyd."], ["38g", "vet"]].map(([val, lbl]) => (
-            <div key={lbl} style={{ flex: 1, background: COLORS.roseLight, borderRadius: 14, padding: "10px 6px", textAlign: "center" }}>
-              <div style={{ fontSize: 15, fontWeight: 500, color: COLORS.text }}>{val}</div>
-              <div style={{ fontSize: 10, color: COLORS.muted, marginTop: 2 }}>{lbl}</div>
+        {todayCheckin ? (
+          <>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <Label>Ochtend check-in gedaan ✦</Label>
+              <button onClick={onCheckin} style={{ background: "none", border: `1px solid ${COLORS.roseBorder}`, borderRadius: 20, padding: "4px 12px", fontSize: 11, color: COLORS.muted, cursor: "pointer", fontFamily: "inherit" }}>Wijzigen</button>
             </div>
-          ))}
-        </div>
-        <ProgressBar value={1240} max={1800} />
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {todayCheckin.wake_mood !== null && <span style={{ fontSize: 12, background: COLORS.roseLight, border: `0.5px solid ${COLORS.roseBorder}`, borderRadius: 20, padding: "4px 12px", color: COLORS.text }}>{WAKE_MOODS[todayCheckin.wake_mood]} {WAKE_LABELS[todayCheckin.wake_mood]}</span>}
+              {todayCheckin.energy && <span style={{ fontSize: 12, background: COLORS.roseLight, border: `0.5px solid ${COLORS.roseBorder}`, borderRadius: 20, padding: "4px 12px", color: COLORS.text }}>Energie {todayCheckin.energy}/5</span>}
+              {todayCheckin.slept && <span style={{ fontSize: 12, background: COLORS.roseLight, border: `0.5px solid ${COLORS.roseBorder}`, borderRadius: 20, padding: "4px 12px", color: COLORS.text }}>{todayCheckin.slept}</span>}
+            </div>
+            {todayCheckin.intention && <p style={{ fontSize: 12, color: COLORS.muted, fontStyle: "italic", marginTop: 8 }}>"{todayCheckin.intention}"</p>}
+            {hour >= 18 && (
+              <button onClick={() => onCheckin("avond")} style={{ width: "100%", marginTop: 12, padding: "12px", borderRadius: 24, background: COLORS.lavender, border: `1px solid ${COLORS.lavenderBorder}`, color: COLORS.text, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
+                Avond check-in starten →
+              </button>
+            )}
+          </>
+        ) : (
+          <>
+            <Label>Ochtend check-in</Label>
+            <div style={{ fontSize: 15, fontWeight: 500, color: COLORS.text, marginBottom: 12, marginTop: 4 }}>Hoe ben je wakker geworden?</div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              {WAKE_MOODS.map((mood, i) => (
+                <button key={i} onClick={onCheckin} style={{ width: 48, height: 48, borderRadius: "50%", border: `1.5px solid ${COLORS.roseBorder}`, background: COLORS.white, fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {mood}
+                </button>
+              ))}
+            </div>
+            <button onClick={onCheckin} style={{ width: "100%", marginTop: 14, padding: "13px", borderRadius: 24, background: COLORS.rose, border: "none", color: COLORS.white, fontSize: 14, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
+              Start check-in →
+            </button>
+          </>
+        )}
+      </Card>
+
+      <Card>
+        <Label>Voeding vandaag</Label>
+        {todayFood.length === 0 ? (
+          <div style={{ fontSize: 13, color: COLORS.muted }}>Nog niets gelogd vandaag.</div>
+        ) : (
+          <>
+            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+              {[[kcal, "kcal"], [protein + "g", "eiwit"], [carbs + "g", "koolhyd."], [fat + "g", "vet"]].map(([val, lbl]) => (
+                <div key={lbl} style={{ flex: 1, background: COLORS.roseLight, borderRadius: 14, padding: "10px 6px", textAlign: "center" }}>
+                  <div style={{ fontSize: 15, fontWeight: 500, color: COLORS.text }}>{val}</div>
+                  <div style={{ fontSize: 10, color: COLORS.muted, marginTop: 2 }}>{lbl}</div>
+                </div>
+              ))}
+            </div>
+            <ProgressBar value={kcal} max={1800} />
+          </>
+        )}
       </Card>
 
       <Card>
         <Label>Vandaag gelogd</Label>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {[
-            { label: "Slaap", value: "6,5 uur", color: COLORS.lavender, border: COLORS.lavenderBorder },
-            { label: "Beweging", value: "Nog niet gelogd", color: COLORS.roseLight, border: COLORS.roseBorder },
-            { label: "Water", value: "1,2L / 2L", color: COLORS.softGreen, border: COLORS.softGreenBorder },
+            { label: "Slaap", value: todayCheckin?.slept || "Niet gelogd", color: COLORS.lavender, border: COLORS.lavenderBorder },
+            { label: "Energie", value: todayCheckin?.energy ? `${todayCheckin.energy}/5` : "Niet gelogd", color: COLORS.roseLight, border: COLORS.roseBorder },
+            { label: "Stemming", value: todayCheckin?.wake_mood !== null && todayCheckin?.wake_mood !== undefined ? WAKE_LABELS[todayCheckin.wake_mood] : "Niet gelogd", color: COLORS.softGreen, border: COLORS.softGreenBorder },
           ].map((item) => (
             <div key={item.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span style={{ fontSize: 13, color: COLORS.muted }}>{item.label}</span>
@@ -514,7 +617,11 @@ function HomeScreen({ profile, onCheckin, user, onPeriodLogged }) {
 }
 
 // ── CHECK-IN SCREEN ───────────────────────────────────────
-function CheckInScreen({ onDone, user }) {
+function CheckInScreen({ onDone, user, checkinType = "ochtend" }) {
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const [existing, setExisting] = useState(null);
+  const [editMode, setEditMode] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [wakeMood, setWakeMood] = useState(null);
   const [energy, setEnergy] = useState(null);
   const [slept, setSlept] = useState("");
@@ -522,15 +629,50 @@ function CheckInScreen({ onDone, user }) {
   const [note, setNote] = useState("");
   const [submitted, setSubmitted] = useState(false);
 
+  useEffect(() => {
+    if (!user) { setLoading(false); return; }
+    supabase.from("checkins").select("*").eq("user_id", user.id)
+      .gte("created_at", todayKey + "T00:00:00").lte("created_at", todayKey + "T23:59:59")
+      .eq("type", checkinType).maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setExisting(data);
+          setWakeMood(data.wake_mood);
+          setEnergy(data.energy);
+          setSlept(data.slept || "");
+          setIntention(data.intention || "");
+          setNote(data.note || "");
+        } else {
+          setEditMode(true);
+        }
+        setLoading(false);
+      });
+  }, [user, todayKey, checkinType]);
+
+  async function save() {
+    if (!user) { setSubmitted(true); return; }
+    const payload = { user_id: user.id, type: checkinType, wake_mood: wakeMood, energy, slept, intention, note };
+    if (existing?.id) {
+      await supabase.from("checkins").update(payload).eq("id", existing.id);
+    } else {
+      await supabase.from("checkins").insert(payload);
+    }
+    setSubmitted(true);
+  }
+
+  if (loading) return <div style={{ textAlign: "center", padding: 40, color: COLORS.muted }}>Laden...</div>;
+
   if (submitted) {
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "60vh", textAlign: "center", gap: 16 }}>
         <div style={{ fontSize: 48 }}>✦</div>
-        <div style={{ fontSize: 22, fontWeight: 500, color: COLORS.text }}>Dankjewel</div>
-        <p style={{ fontSize: 14, color: COLORS.muted, lineHeight: 1.7, maxWidth: 300 }}>Lola heeft je ochtend ontvangen. Ze denkt de hele dag met je mee.</p>
-        <div style={{ background: COLORS.roseLight, borderRadius: 20, padding: "16px 20px", border: `0.5px solid ${COLORS.roseBorder}`, maxWidth: 300 }}>
-          <p style={{ fontSize: 13, color: COLORS.roseDark, fontStyle: "italic", lineHeight: 1.6 }}>"Je intentie voor vandaag is geplant. Laat haar groeien."</p>
-        </div>
+        <div style={{ fontSize: 22, fontWeight: 500, color: COLORS.text }}>{existing ? "Gewijzigd" : "Dankjewel"}</div>
+        <p style={{ fontSize: 14, color: COLORS.muted, lineHeight: 1.7, maxWidth: 300 }}>Lola heeft je check-in ontvangen. Ze denkt de hele dag met je mee.</p>
+        {intention && (
+          <div style={{ background: COLORS.roseLight, borderRadius: 20, padding: "16px 20px", border: `0.5px solid ${COLORS.roseBorder}`, maxWidth: 300 }}>
+            <p style={{ fontSize: 13, color: COLORS.roseDark, fontStyle: "italic", lineHeight: 1.6 }}>"{intention}"</p>
+          </div>
+        )}
         <button onClick={onDone} style={{ marginTop: 8, padding: "13px 32px", borderRadius: 24, background: COLORS.rose, border: "none", color: COLORS.white, fontSize: 14, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
           Terug naar home
         </button>
@@ -538,10 +680,65 @@ function CheckInScreen({ onDone, user }) {
     );
   }
 
+  // Bestaande check-in weergeven (leesmodus)
+  if (existing && !editMode) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div style={{ fontSize: 22, fontWeight: 500, color: COLORS.text }}>Ochtend check-in ✦</div>
+            <div style={{ fontSize: 13, color: COLORS.muted, marginTop: 2 }}>Gelogd vandaag</div>
+          </div>
+          <button onClick={() => setEditMode(true)} style={{ background: COLORS.roseLight, border: `1px solid ${COLORS.roseBorder}`, borderRadius: 20, padding: "8px 18px", fontSize: 13, color: COLORS.roseDark, cursor: "pointer", fontFamily: "inherit", fontWeight: 500 }}>Wijzigen</button>
+        </div>
+        <Card>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {existing.wake_mood !== null && (
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 13, color: COLORS.muted }}>Stemming bij opstaan</span>
+                <span style={{ fontSize: 13, color: COLORS.text, fontWeight: 500 }}>{WAKE_MOODS[existing.wake_mood]} {WAKE_LABELS[existing.wake_mood]}</span>
+              </div>
+            )}
+            {existing.energy && (
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 13, color: COLORS.muted }}>Energie</span>
+                <span style={{ fontSize: 13, color: COLORS.text, fontWeight: 500 }}>{existing.energy}/5</span>
+              </div>
+            )}
+            {existing.slept && (
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 13, color: COLORS.muted }}>Geslapen</span>
+                <span style={{ fontSize: 13, color: COLORS.text, fontWeight: 500 }}>{existing.slept}</span>
+              </div>
+            )}
+            {existing.intention && (
+              <div style={{ paddingTop: 8, borderTop: `0.5px solid ${COLORS.roseBorder}` }}>
+                <div style={{ fontSize: 11, color: COLORS.muted, marginBottom: 4 }}>Intentie</div>
+                <div style={{ fontSize: 13, color: COLORS.text, fontStyle: "italic" }}>"{existing.intention}"</div>
+              </div>
+            )}
+            {existing.note && (
+              <div style={{ paddingTop: 8, borderTop: `0.5px solid ${COLORS.roseBorder}` }}>
+                <div style={{ fontSize: 11, color: COLORS.muted, marginBottom: 4 }}>Notitie aan Lola</div>
+                <div style={{ fontSize: 13, color: COLORS.text }}>{existing.note}</div>
+              </div>
+            )}
+          </div>
+        </Card>
+        <button onClick={onDone} style={{ padding: "13px", borderRadius: 24, background: "transparent", border: `1px solid ${COLORS.roseBorder}`, color: COLORS.muted, fontSize: 14, cursor: "pointer", fontFamily: "inherit" }}>
+          Terug naar home
+        </button>
+      </div>
+    );
+  }
+
+  // Invulformulier (nieuw of bewerken)
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
       <div>
-        <div style={{ fontSize: 22, fontWeight: 500, color: COLORS.text, marginBottom: 4 }}>Ochtend check-in ✦</div>
+        <div style={{ fontSize: 22, fontWeight: 500, color: COLORS.text, marginBottom: 4 }}>
+          {existing ? "Check-in wijzigen ✦" : "Ochtend check-in ✦"}
+        </div>
         <div style={{ fontSize: 13, color: COLORS.muted }}>Neem even 2 minuten voor jezelf</div>
       </div>
       <div style={{ background: COLORS.lavender, borderRadius: 20, padding: "16px 18px", border: `0.5px solid ${COLORS.lavenderBorder}` }}>
@@ -581,29 +778,16 @@ function CheckInScreen({ onDone, user }) {
       </Card>
       <Card>
         <Label>Intentie voor vandaag</Label>
-        <p style={{ fontSize: 12, color: COLORS.muted, marginBottom: 8, lineHeight: 1.5 }}>Geen doelenlijst — één woord, één zin, één gevoel dat je wilt vasthouden vandaag.</p>
-        <textarea value={intention} onChange={(e) => setIntention(e.target.value)} placeholder="Bijv. 'Rustig blijven bij keuzes' of gewoon 'aanwezig zijn'..." rows={3} style={{ width: "100%", border: `1px solid ${COLORS.roseBorder}`, borderRadius: 14, padding: "12px 14px", fontSize: 13, fontFamily: "inherit", color: COLORS.text, background: COLORS.white, resize: "none", outline: "none", boxSizing: "border-box", lineHeight: 1.6 }} />
+        <textarea value={intention} onChange={(e) => setIntention(e.target.value)} placeholder="Eén woord, één zin, één gevoel dat je wilt vasthouden..." rows={3} style={{ width: "100%", border: `1px solid ${COLORS.roseBorder}`, borderRadius: 14, padding: "12px 14px", fontSize: 13, fontFamily: "inherit", color: COLORS.text, background: COLORS.white, resize: "none", outline: "none", boxSizing: "border-box", lineHeight: 1.6 }} />
       </Card>
       <Card>
         <Label>Iets wat je wilt kwijt aan Lola?</Label>
         <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optioneel..." rows={2} style={{ width: "100%", border: `1px solid ${COLORS.roseBorder}`, borderRadius: 14, padding: "12px 14px", fontSize: 13, fontFamily: "inherit", color: COLORS.text, background: COLORS.white, resize: "none", outline: "none", boxSizing: "border-box", lineHeight: 1.6 }} />
       </Card>
-    <button onClick={async () => {
-  if (user) {
-    await supabase.from("checkins").insert({
-      user_id: user.id,
-      type: "ochtend",
-      wake_mood: wakeMood,
-      energy,
-      slept,
-      intention,
-      note,
-    });
-  }
-  setSubmitted(true);
-}} style={{ padding: "15px", borderRadius: 24, background: COLORS.rose, border: "none", color: COLORS.white, fontSize: 15, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
-        Verstuur naar Lola ✦
+      <button onClick={save} style={{ padding: "15px", borderRadius: 24, background: COLORS.rose, border: "none", color: COLORS.white, fontSize: 15, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
+        {existing ? "Wijzigingen opslaan ✦" : "Verstuur naar Lola ✦"}
       </button>
+      {existing && <button onClick={() => setEditMode(false)} style={{ padding: "12px", borderRadius: 24, background: "transparent", border: `1px solid ${COLORS.roseBorder}`, color: COLORS.muted, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Annuleren</button>}
     </div>
   );
 }
@@ -806,7 +990,11 @@ function LolaScreen({ profile, user }) {
 
 ── PROFIEL ──
 Naam: ${facts.name || "onbekend"}
-Human Design: ${facts.hdtype || "onbekend"}
+Leeftijd: ${facts.birthdate ? Math.floor((Date.now() - new Date(facts.birthdate)) / (365.25 * 86400000)) + " jaar" : "onbekend"}
+Sterrenbeeld: ${getZodiac(facts.birthdate) || "onbekend"}
+Human Design type: ${facts.hdtype || "onbekend"}
+HD Profiel: ${facts.hdprofile || "onbekend"}
+HD Autoriteit: ${facts.hdauthority || "onbekend"}
 Cycluslengte: ${facts.cyclelength || "onbekend"}
 
 ── CYCLUS VANDAAG ──
@@ -1366,6 +1554,117 @@ function HistoryScreen({ user, profile }) {
   );
 }
 
+// ── PROFIEL SCREEN ────────────────────────────────────────
+function ProfileScreen({ profile, user, onProfileUpdated }) {
+  const facts = profile?.facts || {};
+  const [form, setForm] = useState({
+    name: facts.name || "",
+    birthdate: facts.birthdate || "",
+    birthtime: facts.birthtime || "",
+    birthplace: facts.birthplace || "",
+    hdtype: facts.hdtype || "",
+    hdprofile: facts.hdprofile || "",
+    hdauthority: facts.hdauthority || "",
+    cyclelength: facts.cyclelength || "28–32 dagen",
+    lastperiod: facts.lastperiod || "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const set = (k, v) => { setForm(p => ({ ...p, [k]: v })); setSaved(false); };
+
+  const zodiac = getZodiac(form.birthdate);
+  const age = form.birthdate ? Math.floor((Date.now() - new Date(form.birthdate)) / (365.25 * 86400000)) : null;
+
+  const inputStyle = { width: "100%", padding: "11px 14px", borderRadius: 14, border: `1.5px solid ${COLORS.roseBorder}`, background: COLORS.white, color: COLORS.text, fontSize: 14, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginTop: 6 };
+  const selectStyle = { ...inputStyle, appearance: "none", cursor: "pointer" };
+
+  async function save() {
+    setSaving(true);
+    await supabase.from("profiles").upsert({ id: user.id, ...form });
+    onProfileUpdated({ ...facts, ...form });
+    setSaving(false);
+    setSaved(true);
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div>
+        <div style={{ fontSize: 22, fontWeight: 500, color: COLORS.text, marginBottom: 4 }}>Jouw profiel</div>
+        <div style={{ fontSize: 13, color: COLORS.muted }}>Alles wat Lola over jou weet</div>
+      </div>
+
+      {(zodiac || age) && (
+        <div style={{ display: "flex", gap: 10 }}>
+          {zodiac && <div style={{ flex: 1, background: COLORS.roseLight, borderRadius: 16, padding: "12px 14px", border: `0.5px solid ${COLORS.roseBorder}` }}>
+            <div style={{ fontSize: 10, color: COLORS.muted, marginBottom: 4 }}>Sterrenbeeld</div>
+            <div style={{ fontSize: 15, fontWeight: 500, color: COLORS.text }}>{zodiac}</div>
+          </div>}
+          {age && <div style={{ flex: 1, background: COLORS.roseLight, borderRadius: 16, padding: "12px 14px", border: `0.5px solid ${COLORS.roseBorder}` }}>
+            <div style={{ fontSize: 10, color: COLORS.muted, marginBottom: 4 }}>Leeftijd</div>
+            <div style={{ fontSize: 15, fontWeight: 500, color: COLORS.text }}>{age} jaar</div>
+          </div>}
+        </div>
+      )}
+
+      <Card>
+        <Label>Persoonlijk</Label>
+        <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 14 }}>
+          {[["name","Naam","text","Jouw naam"],["birthdate","Geboortedatum","date",null],["birthtime","Geboortetijd","time",null],["birthplace","Geboorteplaats","text","Stad, land"]].map(([k,lbl,type,ph]) => (
+            <div key={k}>
+              <label style={{ fontSize: 12, fontWeight: 500, color: COLORS.muted }}>{lbl}</label>
+              <input type={type} value={form[k]} placeholder={ph || ""} onChange={e => set(k, e.target.value)} style={inputStyle} />
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card>
+        <Label>Human Design</Label>
+        <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 14 }}>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 500, color: COLORS.muted }}>Type</label>
+            <select value={form.hdtype} onChange={e => set("hdtype", e.target.value)} style={selectStyle}>
+              <option value="">Onbekend</option>
+              {["Manifestor","Generator","Manifesting Generator","Projector","Reflector"].map(o => <option key={o}>{o}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 500, color: COLORS.muted }}>Profiel (bijv. 2/4)</label>
+            <input type="text" value={form.hdprofile} placeholder="bijv. 2/4, 1/3, 6/2..." onChange={e => set("hdprofile", e.target.value)} style={inputStyle} />
+          </div>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 500, color: COLORS.muted }}>Autoriteit</label>
+            <select value={form.hdauthority} onChange={e => set("hdauthority", e.target.value)} style={selectStyle}>
+              <option value="">Onbekend</option>
+              {["Emotioneel","Sacraal","Splenisch","Ego/Hart","Zelf/G-centrum","Mentaal","Maanautoriteit"].map(o => <option key={o}>{o}</option>)}
+            </select>
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <Label>Cyclus</Label>
+        <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 14 }}>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 500, color: COLORS.muted }}>Gemiddelde cycluslengte</label>
+            <select value={form.cyclelength} onChange={e => set("cyclelength", e.target.value)} style={selectStyle}>
+              {["Korter dan 25 dagen","25–28 dagen","28–32 dagen","Langer dan 32 dagen","Onregelmatig"].map(o => <option key={o}>{o}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 500, color: COLORS.muted }}>Eerste dag laatste menstruatie</label>
+            <input type="date" value={form.lastperiod} onChange={e => set("lastperiod", e.target.value)} style={inputStyle} />
+          </div>
+        </div>
+      </Card>
+
+      <button onClick={save} disabled={saving} style={{ padding: "15px", borderRadius: 24, background: saved ? COLORS.softGreen : COLORS.rose, border: saved ? `1px solid ${COLORS.softGreenBorder}` : "none", color: saved ? COLORS.text : COLORS.white, fontSize: 15, fontWeight: 500, cursor: "pointer", fontFamily: "inherit", transition: "background 0.3s" }}>
+        {saving ? "Opslaan..." : saved ? "✓ Opgeslagen" : "Profiel opslaan"}
+      </button>
+    </div>
+  );
+}
+
 // ── MAIN APP ──────────────────────────────────────────────
 export default function App() {
   const [phase, setPhase] = useState("auth");
@@ -1502,11 +1801,18 @@ onSkip={async () => {
   const { day: cycleDay, phase: currentPhase } = getCycleInfo(profile?.facts?.lastperiod, profile?.facts?.cyclelength);
 
   const screenMap = {
-    home: <HomeScreen profile={profile} onCheckin={() => setScreen("checkin")} user={user} onPeriodLogged={(dateStr) => setProfile(p => ({ ...p, facts: { ...p.facts, lastperiod: dateStr } }))} />,
+    home: <HomeScreen
+      profile={profile}
+      onCheckin={() => setScreen("checkin")}
+      onGoToLola={() => setScreen("lola")}
+      user={user}
+      onPeriodLogged={(dateStr) => setProfile(p => ({ ...p, facts: { ...p.facts, lastperiod: dateStr } }))}
+    />,
     checkin: <CheckInScreen user={user} onDone={() => setScreen("home")} />,
     food: <FoodScreen user={user} />,
     history: <HistoryScreen user={user} profile={profile} />,
     lola: <LolaScreen profile={profile} user={user} />,
+    profile: <ProfileScreen profile={profile} user={user} onProfileUpdated={(updated) => setProfile(p => ({ ...p, facts: updated }))} />,
   };
 
   return (
@@ -1524,8 +1830,16 @@ onSkip={async () => {
             <span style={{ fontSize: 16, color: COLORS.rose }}>✦</span>
             <span style={{ fontSize: 18, fontWeight: 600, color: COLORS.text, letterSpacing: "-0.02em" }}>lola</span>
           </div>
-          <div style={{ fontSize: 11, color: COLORS.muted, background: COLORS.roseLight, padding: "4px 12px", borderRadius: 20, border: `0.5px solid ${COLORS.roseBorder}` }}>
-            {cycleDay ? `Dag ${cycleDay} · ` : ""}{currentPhase.name}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ fontSize: 11, color: COLORS.muted, background: COLORS.roseLight, padding: "4px 12px", borderRadius: 20, border: `0.5px solid ${COLORS.roseBorder}` }}>
+              {cycleDay ? `Dag ${cycleDay} · ` : ""}{currentPhase.name}
+            </div>
+            <button onClick={() => setScreen("profile")} style={{ width: 32, height: 32, borderRadius: "50%", background: screen === "profile" ? COLORS.rose : COLORS.roseLight, border: `1px solid ${COLORS.roseBorder}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <svg width="14" height="14" viewBox="0 0 22 22" fill="none">
+                <circle cx="11" cy="8" r="4" stroke={screen === "profile" ? "white" : COLORS.rose} strokeWidth="1.5"/>
+                <path d="M4 19c0-3.314 3.134-6 7-6s7 2.686 7 6" stroke={screen === "profile" ? "white" : COLORS.rose} strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+            </button>
           </div>
         </div>
         {screenMap[screen]}
