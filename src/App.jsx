@@ -215,6 +215,7 @@ function NavBar({ active, onChange }) {
     { id: "checkin", label: "Check-in", icon: <svg viewBox="0 0 22 22" fill="none"><rect x="4" y="6" width="14" height="12" rx="3" stroke="currentColor" strokeWidth="1.5"/><path d="M8 11l2.5 2.5L14 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> },
     { id: "food", label: "Voeding", icon: <svg viewBox="0 0 22 22" fill="none"><path d="M11 18C11 18 5 14 5 9C5 6 7.5 4 11 4C14.5 4 17 6 17 9C17 14 11 18 11 18Z" stroke="currentColor" strokeWidth="1.5"/><line x1="11" y1="18" x2="11" y2="11" stroke="currentColor" strokeWidth="1.5"/></svg> },
     { id: "history", label: "Kalender", icon: <svg viewBox="0 0 22 22" fill="none"><rect x="3" y="5" width="16" height="14" rx="3" stroke="currentColor" strokeWidth="1.5"/><path d="M3 9h16" stroke="currentColor" strokeWidth="1.5"/><path d="M7 3v4M15 3v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="7" cy="13" r="1" fill="currentColor"/><circle cx="11" cy="13" r="1" fill="currentColor"/><circle cx="15" cy="13" r="1" fill="currentColor"/></svg> },
+    { id: "hd", label: "Design", icon: <svg viewBox="0 0 22 22" fill="none"><polygon points="11,3 19,8 19,16 11,21 3,16 3,8" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><circle cx="11" cy="12" r="3" stroke="currentColor" strokeWidth="1.5"/></svg> },
     { id: "lola", label: "Lola", icon: <svg viewBox="0 0 22 22" fill="none"><path d="M11 4l1.5 4.5H17l-3.8 2.8 1.5 4.5L11 13l-3.7 2.8 1.5-4.5L5 8.5h4.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg> },
   ];
   return (
@@ -1554,6 +1555,212 @@ function HistoryScreen({ user, profile }) {
   );
 }
 
+// ── HUMAN DESIGN SCREEN ───────────────────────────────────
+const HD_CENTERS = [
+  { id: "Head",     label: "Hoofd",       x: 185, y: 18,  w: 70, h: 50, shape: "triangle-up" },
+  { id: "Ajna",     label: "Ajna",        x: 185, y: 88,  w: 70, h: 50, shape: "triangle-down" },
+  { id: "Throat",   label: "Keel",        x: 175, y: 168, w: 90, h: 42, shape: "rect" },
+  { id: "G",        label: "G / Zelf",    x: 165, y: 240, w: 110,h: 80, shape: "diamond" },
+  { id: "Heart",    label: "Hart / Ego",  x: 88,  y: 242, w: 60, h: 60, shape: "triangle-down" },
+  { id: "Sacral",   label: "Sacraal",     x: 165, y: 348, w: 110,h: 60, shape: "rect" },
+  { id: "Spleen",   label: "Milt",        x: 68,  y: 310, w: 75, h: 75, shape: "triangle-up" },
+  { id: "Solar",    label: "Zonnevlecht", x: 283, y: 310, w: 75, h: 75, shape: "triangle-up" },
+  { id: "Root",     label: "Wortel",      x: 165, y: 432, w: 110,h: 60, shape: "rect" },
+];
+
+function HdCenter({ center, defined }) {
+  const fill = defined ? COLORS.rose : COLORS.roseLight;
+  const stroke = defined ? COLORS.roseDark : COLORS.roseBorder;
+  const textColor = defined ? COLORS.white : COLORS.muted;
+  const { x, y, w, h, label, shape } = center;
+  const cx = x + w / 2;
+  const cy = y + h / 2;
+
+  let path = null;
+  if (shape === "triangle-up") {
+    path = `M${cx},${y} L${x + w},${y + h} L${x},${y + h} Z`;
+  } else if (shape === "triangle-down") {
+    path = `M${x},${y} L${x + w},${y} L${cx},${y + h} Z`;
+  } else if (shape === "diamond") {
+    path = `M${cx},${y} L${x + w},${cy} L${cx},${y + h} L${x},${cy} Z`;
+  }
+
+  return (
+    <g>
+      {shape === "rect" ? (
+        <rect x={x} y={y} width={w} height={h} rx={10} fill={fill} stroke={stroke} strokeWidth={1.5} />
+      ) : (
+        <path d={path} fill={fill} stroke={stroke} strokeWidth={1.5} />
+      )}
+      <text x={cx} y={cy + (shape === "triangle-up" ? 10 : shape === "triangle-down" ? -5 : 0)} textAnchor="middle" dominantBaseline="middle" fill={textColor} fontSize={shape === "rect" ? 11 : 9} fontFamily="DM Sans, sans-serif" fontWeight={defined ? 600 : 400}>
+        {label}
+      </text>
+    </g>
+  );
+}
+
+function HumanDesignScreen({ profile, user }) {
+  const facts = profile?.facts || {};
+  const [chart, setChart] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [saved, setSaved] = useState(false);
+
+  const canCalculate = facts.birthdate && facts.birthtime && facts.birthplace;
+
+  useEffect(() => {
+    if (canCalculate) fetchChart();
+  }, []);
+
+  async function fetchChart() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/hd-chart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ birthdate: facts.birthdate, birthtime: facts.birthtime, birthplace: facts.birthplace }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setChart(data);
+      // Sla type, profiel, autoriteit automatisch op in profiel
+      if (user && data.type) {
+        await supabase.from("profiles").update({
+          hdtype: data.type,
+          hdprofile: data.profile,
+          hdauthority: data.authority,
+        }).eq("id", user.id);
+        setSaved(true);
+      }
+    } catch (e) {
+      setError("Kon de chart niet berekenen. Controleer of je geboortegegevens volledig zijn ingevuld.");
+    }
+    setLoading(false);
+  }
+
+  const TYPE_DESC = {
+    "Generator": "Je bent er om te doen wat je energie geeft. Jouw kracht zit in je respons — niet in initiatief nemen.",
+    "Manifesting Generator": "Je combineert energie met actie. Je bent snel, multi-gepassioneerd en gemaakt om te experimenteren.",
+    "Projector": "Jij ziet mensen door en door. Je bent er om te begeleiden — wacht op de uitnodiging.",
+    "Manifestor": "Jij initieert. Je bent hier om impact te maken — informeer de mensen om je heen.",
+    "Reflector": "Jij weerspiegelt de gezondheid van je omgeving. Neem de tijd voor grote beslissingen.",
+  };
+
+  const AUTHORITY_DESC = {
+    "Sacral": "Luister naar je buikgevoel — een direct ja of nee gevoel in je lijf.",
+    "Emotional": "Wacht op emotionele helderheid voor grote beslissingen. Slaap er een nacht over.",
+    "Splenic": "Vertrouw op je spontane instinct in het moment.",
+    "Ego": "Vertrouw op wat jij echt wilt. Jouw wil is jouw autoriteit.",
+    "Self": "Luister naar wat jou vrolijk maakt en je richting geeft.",
+    "Mental": "Praat je beslissing uit met vertrouwde mensen — niet voor advies, maar om te horen wat je zelf zegt.",
+    "Lunar": "Wacht een volledige maancyclus (28 dagen) voor grote beslissingen.",
+  };
+
+  if (!canCalculate) return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ fontSize: 22, fontWeight: 500, color: COLORS.text }}>Human Design ✦</div>
+      <Card>
+        <p style={{ fontSize: 13, color: COLORS.muted, lineHeight: 1.7 }}>
+          Om je Human Design chart te berekenen heb ik je geboortedatum, geboortetijd en geboorteplaats nodig. Vul deze in via je profiel.
+        </p>
+      </Card>
+    </div>
+  );
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <div style={{ fontSize: 22, fontWeight: 500, color: COLORS.text }}>Human Design ✦</div>
+          <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 2 }}>{facts.birthdate} · {facts.birthtime} · {facts.birthplace}</div>
+        </div>
+        <button onClick={fetchChart} disabled={loading} style={{ background: "none", border: `1px solid ${COLORS.roseBorder}`, borderRadius: 20, padding: "6px 14px", fontSize: 12, color: COLORS.rose, cursor: "pointer", fontFamily: "inherit" }}>
+          {loading ? "..." : "↺ Herbereken"}
+        </button>
+      </div>
+
+      {loading && (
+        <div style={{ textAlign: "center", padding: 40, color: COLORS.muted, fontSize: 13 }}>
+          <div style={{ fontSize: 28, marginBottom: 12 }}>✦</div>
+          Lola berekent je chart...
+        </div>
+      )}
+
+      {error && <Card><p style={{ fontSize: 13, color: COLORS.rose }}>{error}</p></Card>}
+
+      {chart && !loading && (
+        <>
+          {saved && <div style={{ fontSize: 12, color: COLORS.rose, textAlign: "center" }}>✦ Profiel automatisch bijgewerkt</div>}
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {[
+              { label: "Type", value: chart.type },
+              { label: "Profiel", value: chart.profile },
+              { label: "Autoriteit", value: chart.authority },
+              { label: "Definitie", value: chart.definition },
+            ].map(({ label, value }) => (
+              <div key={label} style={{ background: COLORS.roseLight, borderRadius: 16, padding: "14px", border: `0.5px solid ${COLORS.roseBorder}` }}>
+                <div style={{ fontSize: 10, color: COLORS.muted, marginBottom: 4, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: COLORS.text }}>{value || "—"}</div>
+              </div>
+            ))}
+          </div>
+
+          {chart.incarnation_cross && (
+            <Card>
+              <Label>Incarnatiekruis</Label>
+              <div style={{ fontSize: 13, color: COLORS.text, marginTop: 4, lineHeight: 1.6 }}>{chart.incarnation_cross}</div>
+            </Card>
+          )}
+
+          {chart.type && TYPE_DESC[chart.type] && (
+            <Card style={{ background: COLORS.cream }}>
+              <Label>Wat dit betekent voor jou</Label>
+              <p style={{ fontSize: 13, color: COLORS.text, lineHeight: 1.7, marginTop: 6 }}>{TYPE_DESC[chart.type]}</p>
+              {chart.authority && AUTHORITY_DESC[chart.authority] && (
+                <p style={{ fontSize: 13, color: COLORS.muted, lineHeight: 1.7, marginTop: 8, paddingTop: 8, borderTop: `0.5px solid ${COLORS.roseBorder}` }}>
+                  <strong style={{ color: COLORS.text }}>Autoriteit:</strong> {AUTHORITY_DESC[chart.authority]}
+                </p>
+              )}
+            </Card>
+          )}
+
+          <Card>
+            <Label>Bodygraph — gedefinieerde centra</Label>
+            <div style={{ marginTop: 12, overflowX: "auto" }}>
+              <svg viewBox="0 0 440 510" style={{ width: "100%", maxWidth: 440 }}>
+                {HD_CENTERS.map(c => (
+                  <HdCenter key={c.id} center={c} defined={(chart.centers || []).some(d => d.toLowerCase().includes(c.id.toLowerCase()) || c.label.toLowerCase().includes(d.toLowerCase()))} />
+                ))}
+              </svg>
+            </div>
+            <div style={{ display: "flex", gap: 16, marginTop: 8, fontSize: 11, color: COLORS.muted }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ width: 12, height: 12, borderRadius: 3, background: COLORS.rose }} /> Gedefinieerd
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ width: 12, height: 12, borderRadius: 3, background: COLORS.roseLight, border: `1px solid ${COLORS.roseBorder}` }} /> Open
+              </div>
+            </div>
+          </Card>
+
+          {chart.gates && chart.gates.length > 0 && (
+            <Card>
+              <Label>Actieve poorten</Label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                {chart.gates.map(g => (
+                  <span key={g} style={{ fontSize: 12, background: COLORS.roseLight, border: `0.5px solid ${COLORS.roseBorder}`, borderRadius: 20, padding: "4px 12px", color: COLORS.text }}>Poort {g}</span>
+                ))}
+              </div>
+            </Card>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── PROFIEL SCREEN ────────────────────────────────────────
 function ProfileScreen({ profile, user, onProfileUpdated }) {
   const facts = profile?.facts || {};
@@ -1811,6 +2018,7 @@ onSkip={async () => {
     checkin: <CheckInScreen user={user} onDone={() => setScreen("home")} />,
     food: <FoodScreen user={user} />,
     history: <HistoryScreen user={user} profile={profile} />,
+    hd: <HumanDesignScreen profile={profile} user={user} />,
     lola: <LolaScreen profile={profile} user={user} />,
     profile: <ProfileScreen profile={profile} user={user} onProfileUpdated={(updated) => setProfile(p => ({ ...p, facts: updated }))} />,
   };
