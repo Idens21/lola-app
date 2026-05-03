@@ -28,6 +28,32 @@ const PHASES = [
   { name: "Luteaal", days: "Dag 17–28", color: "#C4748A", desc: "Naar binnen. Meer behoefte aan koolhydraten en warmte. Zachtheid mag." },
 ];
 
+function getCycleInfoForDate(lastperiod, cyclelength, date) {
+  if (!lastperiod) return { day: null, phase: PHASES[3] };
+  let avgLength = 28;
+  if (cyclelength === "Korter dan 25 dagen") avgLength = 24;
+  else if (cyclelength === "25–28 dagen") avgLength = 26;
+  else if (cyclelength === "28–32 dagen") avgLength = 30;
+  else if (cyclelength === "Langer dan 32 dagen") avgLength = 35;
+  const start = new Date(lastperiod);
+  start.setHours(0, 0, 0, 0);
+  const target = new Date(date);
+  target.setHours(0, 0, 0, 0);
+  const diffDays = Math.floor((target - start) / 86400000);
+  if (diffDays < 0) return { day: null, phase: PHASES[3] };
+  const cycleDay = (diffDays % avgLength) + 1;
+  let phase;
+  if (cycleDay <= 5) phase = PHASES[0];
+  else if (cycleDay <= 13) phase = PHASES[1];
+  else if (cycleDay <= 16) phase = PHASES[2];
+  else phase = PHASES[3];
+  return { day: cycleDay, phase };
+}
+
+function getCycleInfo(lastperiod, cyclelength) {
+  return getCycleInfoForDate(lastperiod, cyclelength, new Date());
+}
+
 const WAKE_MOODS = ["😴", "😔", "😐", "🙂", "✨"];
 const WAKE_LABELS = ["Zwaar", "Moeizaam", "Oké", "Fris", "Uitgerust"];
 const DAILY_THOUGHT = "Wat als de vermoeidheid die je voelt geen zwakte is, maar een signaal dat je iets nodig hebt wat je jezelf nog niet gegund hebt?";
@@ -146,6 +172,7 @@ function NavBar({ active, onChange }) {
     { id: "home", label: "Home", icon: <svg viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.5"/></svg> },
     { id: "checkin", label: "Check-in", icon: <svg viewBox="0 0 22 22" fill="none"><rect x="4" y="6" width="14" height="12" rx="3" stroke="currentColor" strokeWidth="1.5"/><path d="M8 11l2.5 2.5L14 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> },
     { id: "food", label: "Voeding", icon: <svg viewBox="0 0 22 22" fill="none"><path d="M11 18C11 18 5 14 5 9C5 6 7.5 4 11 4C14.5 4 17 6 17 9C17 14 11 18 11 18Z" stroke="currentColor" strokeWidth="1.5"/><line x1="11" y1="18" x2="11" y2="11" stroke="currentColor" strokeWidth="1.5"/></svg> },
+    { id: "history", label: "Kalender", icon: <svg viewBox="0 0 22 22" fill="none"><rect x="3" y="5" width="16" height="14" rx="3" stroke="currentColor" strokeWidth="1.5"/><path d="M3 9h16" stroke="currentColor" strokeWidth="1.5"/><path d="M7 3v4M15 3v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="7" cy="13" r="1" fill="currentColor"/><circle cx="11" cy="13" r="1" fill="currentColor"/><circle cx="15" cy="13" r="1" fill="currentColor"/></svg> },
     { id: "lola", label: "Lola", icon: <svg viewBox="0 0 22 22" fill="none"><path d="M11 4l1.5 4.5H17l-3.8 2.8 1.5 4.5L11 13l-3.7 2.8 1.5-4.5L5 8.5h4.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg> },
   ];
   return (
@@ -390,7 +417,7 @@ function HomeScreen({ profile, onCheckin }) {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Goedemorgen" : hour < 18 ? "Goedemiddag" : "Goedenavond";
   const today = new Date().toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long" });
-  const phase = PHASES[3];
+  const { day: cycleDay, phase } = getCycleInfo(profile?.facts?.lastperiod, profile?.facts?.cyclelength);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -407,7 +434,7 @@ function HomeScreen({ profile, onCheckin }) {
       <div style={{ background: COLORS.roseLight, borderRadius: 20, padding: "14px 18px", border: `0.5px solid ${COLORS.roseBorder}`, display: "flex", alignItems: "center", gap: 12 }}>
         <div style={{ width: 10, height: 10, borderRadius: "50%", background: phase.color, flexShrink: 0 }} />
         <div>
-          <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.roseDark }}>{phase.name} · Dag 19</div>
+          <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.roseDark }}>{phase.name}{cycleDay ? ` · Dag ${cycleDay}` : ""}</div>
           <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 2, lineHeight: 1.5 }}>{phase.desc}</div>
         </div>
       </div>
@@ -895,6 +922,198 @@ const [grams, setGrams] = useState("100");
   );
 }
 
+// ── GESCHIEDENIS KALENDER ─────────────────────────────────
+function HistoryScreen({ user, profile }) {
+  const today = new Date();
+  const [viewDate, setViewDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
+  const [checkins, setCheckins] = useState([]);
+  const [foodLogs, setFoodLogs] = useState([]);
+  const [selectedDay, setSelectedDay] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const monthLabel = firstDay.toLocaleDateString("nl-NL", { month: "long", year: "numeric" });
+
+  useEffect(() => {
+    if (!user) return;
+    setLoading(true);
+    const from = `${year}-${String(month + 1).padStart(2, "0")}-01`;
+    const to = `${year}-${String(month + 1).padStart(2, "0")}-${String(lastDay.getDate()).padStart(2, "0")}`;
+    Promise.all([
+      supabase.from("checkins").select("*").eq("user_id", user.id).gte("created_at", from).lte("created_at", to + "T23:59:59"),
+      supabase.from("food_logs").select("*").eq("user_id", user.id).gte("created_at", from).lte("created_at", to + "T23:59:59"),
+    ]).then(([{ data: ci }, { data: fl }]) => {
+      setCheckins(ci || []);
+      setFoodLogs(fl || []);
+      setLoading(false);
+    });
+  }, [viewDate, user]);
+
+  function dateKey(d) {
+    return new Date(d).toISOString().slice(0, 10);
+  }
+
+  const checkinByDay = {};
+  checkins.forEach(c => { checkinByDay[dateKey(c.created_at)] = c; });
+
+  const foodByDay = {};
+  foodLogs.forEach(f => {
+    const k = dateKey(f.created_at);
+    if (!foodByDay[k]) foodByDay[k] = [];
+    foodByDay[k].push(f);
+  });
+
+  const startOffset = (firstDay.getDay() + 6) % 7;
+  const totalCells = startOffset + lastDay.getDate();
+  const rows = Math.ceil(totalCells / 7);
+  const cells = Array.from({ length: rows * 7 }, (_, i) => {
+    const dayNum = i - startOffset + 1;
+    return dayNum >= 1 && dayNum <= lastDay.getDate() ? dayNum : null;
+  });
+
+  function dayKey(d) {
+    return `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  }
+
+  const selectedKey = selectedDay ? dayKey(selectedDay) : null;
+  const selectedCheckin = selectedKey ? checkinByDay[selectedKey] : null;
+  const selectedFood = selectedKey ? (foodByDay[selectedKey] || []) : [];
+  const selectedCycle = selectedDay
+    ? getCycleInfoForDate(profile?.facts?.lastperiod, profile?.facts?.cyclelength, new Date(year, month, selectedDay))
+    : null;
+
+  const WAKE_MOODS_ARR = ["😴", "😔", "😐", "🙂", "✨"];
+  const WAKE_LABELS_ARR = ["Zwaar", "Moeizaam", "Oké", "Fris", "Uitgerust"];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <button onClick={() => setViewDate(new Date(year, month - 1, 1))} style={{ background: "none", border: "none", cursor: "pointer", color: COLORS.muted, fontSize: 20, padding: "4px 8px" }}>‹</button>
+        <div style={{ fontSize: 15, fontWeight: 500, color: COLORS.text, textTransform: "capitalize" }}>{monthLabel}</div>
+        <button onClick={() => setViewDate(new Date(year, month + 1, 1))} disabled={viewDate >= new Date(today.getFullYear(), today.getMonth(), 1)} style={{ background: "none", border: "none", cursor: viewDate >= new Date(today.getFullYear(), today.getMonth(), 1) ? "default" : "pointer", color: viewDate >= new Date(today.getFullYear(), today.getMonth(), 1) ? COLORS.roseBorder : COLORS.muted, fontSize: 20, padding: "4px 8px" }}>›</button>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, textAlign: "center" }}>
+        {["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"].map(d => (
+          <div key={d} style={{ fontSize: 10, color: COLORS.muted, fontWeight: 500, padding: "4px 0" }}>{d}</div>
+        ))}
+        {cells.map((dayNum, i) => {
+          if (!dayNum) return <div key={i} />;
+          const key = dayKey(dayNum);
+          const hasCheckin = !!checkinByDay[key];
+          const hasFood = (foodByDay[key] || []).length > 0;
+          const cycleInfo = getCycleInfoForDate(profile?.facts?.lastperiod, profile?.facts?.cyclelength, new Date(year, month, dayNum));
+          const isToday = key === today.toISOString().slice(0, 10);
+          const isSelected = selectedDay === dayNum;
+          const isPast = new Date(year, month, dayNum) <= today;
+
+          return (
+            <button
+              key={i}
+              onClick={() => isPast && setSelectedDay(selectedDay === dayNum ? null : dayNum)}
+              style={{
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                padding: "6px 0", borderRadius: 12, cursor: isPast ? "pointer" : "default",
+                border: isToday ? `1.5px solid ${COLORS.rose}` : isSelected ? `1.5px solid ${COLORS.roseDark}` : "1.5px solid transparent",
+                background: isSelected ? COLORS.roseLight : "transparent",
+                opacity: isPast ? 1 : 0.3,
+              }}
+            >
+              <div style={{ fontSize: 13, fontWeight: isToday ? 600 : 400, color: isToday ? COLORS.rose : COLORS.text, marginBottom: 3 }}>{dayNum}</div>
+              <div style={{ display: "flex", gap: 2, alignItems: "center", height: 10 }}>
+                {cycleInfo.day && <div style={{ width: 5, height: 5, borderRadius: "50%", background: cycleInfo.phase.color }} />}
+                {hasCheckin && <div style={{ width: 5, height: 5, borderRadius: "50%", background: COLORS.rose }} />}
+                {hasFood && <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#A0C4A8" }} />}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{ display: "flex", gap: 12, fontSize: 11, color: COLORS.muted }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{ width: 7, height: 7, borderRadius: "50%", background: COLORS.rose }} />Check-in</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{ width: 7, height: 7, borderRadius: "50%", background: "#A0C4A8" }} />Voeding</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{ width: 7, height: 7, borderRadius: "50%", background: COLORS.roseBorder }} />Cyclus</div>
+      </div>
+
+      {loading && <div style={{ textAlign: "center", color: COLORS.muted, fontSize: 13, padding: 20 }}>Laden...</div>}
+
+      {selectedDay && !loading && (
+        <Card>
+          <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.roseDark, marginBottom: 12 }}>
+            {new Date(year, month, selectedDay).toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long" })}
+          </div>
+
+          {selectedCycle?.day && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, padding: "8px 12px", background: COLORS.roseLight, borderRadius: 12, border: `0.5px solid ${COLORS.roseBorder}` }}>
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: selectedCycle.phase.color }} />
+              <span style={{ fontSize: 12, color: COLORS.text }}>{selectedCycle.phase.name} · Dag {selectedCycle.day}</span>
+            </div>
+          )}
+
+          {selectedCheckin ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+              <Label>Ochtend check-in</Label>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {selectedCheckin.wake_mood !== null && (
+                  <div style={{ background: COLORS.roseLight, borderRadius: 10, padding: "6px 12px", fontSize: 12, color: COLORS.text }}>
+                    {WAKE_MOODS_ARR[selectedCheckin.wake_mood]} {WAKE_LABELS_ARR[selectedCheckin.wake_mood]}
+                  </div>
+                )}
+                {selectedCheckin.energy && (
+                  <div style={{ background: COLORS.roseLight, borderRadius: 10, padding: "6px 12px", fontSize: 12, color: COLORS.text }}>
+                    Energie {selectedCheckin.energy}/5
+                  </div>
+                )}
+                {selectedCheckin.slept && (
+                  <div style={{ background: COLORS.roseLight, borderRadius: 10, padding: "6px 12px", fontSize: 12, color: COLORS.text }}>
+                    {selectedCheckin.slept}
+                  </div>
+                )}
+              </div>
+              {selectedCheckin.intention && (
+                <div style={{ fontSize: 12, color: COLORS.muted, fontStyle: "italic", lineHeight: 1.5 }}>
+                  "{selectedCheckin.intention}"
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, color: COLORS.muted, marginBottom: 12 }}>Geen check-in op deze dag.</div>
+          )}
+
+          {selectedFood.length > 0 ? (
+            <div>
+              <Label>Voeding</Label>
+              <div style={{ display: "flex", gap: 8, marginBottom: 8, marginTop: 4 }}>
+                {["kcal", "protein", "carbs", "fat"].map(k => {
+                  const total = selectedFood.reduce((s, f) => s + (f[k] || 0), 0);
+                  const labels = { kcal: "kcal", protein: "eiwit", carbs: "koolhyd.", fat: "vet" };
+                  return (
+                    <div key={k} style={{ flex: 1, background: COLORS.roseLight, borderRadius: 10, padding: "8px 4px", textAlign: "center" }}>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.text }}>{total}{k !== "kcal" ? "g" : ""}</div>
+                      <div style={{ fontSize: 10, color: COLORS.muted }}>{labels[k]}</div>
+                    </div>
+                  );
+                })}
+              </div>
+              {selectedFood.map((f, i) => (
+                <div key={i} style={{ fontSize: 12, color: COLORS.muted, padding: "4px 0", borderBottom: `0.5px solid ${COLORS.roseBorder}` }}>
+                  {f.product_name} <span style={{ color: COLORS.rose }}>{f.kcal} kcal</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, color: COLORS.muted }}>Geen voeding gelogd op deze dag.</div>
+          )}
+        </Card>
+      )}
+    </div>
+  );
+}
+
 // ── MAIN APP ──────────────────────────────────────────────
 export default function App() {
   const [phase, setPhase] = useState("auth");
@@ -1028,10 +1247,13 @@ onSkip={async () => {
     );
   }
 
+  const { day: cycleDay, phase: currentPhase } = getCycleInfo(profile?.facts?.lastperiod, profile?.facts?.cyclelength);
+
   const screenMap = {
     home: <HomeScreen profile={profile} onCheckin={() => setScreen("checkin")} />,
-checkin: <CheckInScreen user={user} onDone={() => setScreen("home")} />,
-food: <FoodScreen user={user} />,
+    checkin: <CheckInScreen user={user} onDone={() => setScreen("home")} />,
+    food: <FoodScreen user={user} />,
+    history: <HistoryScreen user={user} profile={profile} />,
     lola: <LolaScreen profile={profile} />,
   };
 
@@ -1051,7 +1273,7 @@ food: <FoodScreen user={user} />,
             <span style={{ fontSize: 18, fontWeight: 600, color: COLORS.text, letterSpacing: "-0.02em" }}>lola</span>
           </div>
           <div style={{ fontSize: 11, color: COLORS.muted, background: COLORS.roseLight, padding: "4px 12px", borderRadius: 20, border: `0.5px solid ${COLORS.roseBorder}` }}>
-            Dag 19 · Luteaal
+            {cycleDay ? `Dag ${cycleDay} · ` : ""}{currentPhase.name}
           </div>
         </div>
         {screenMap[screen]}
