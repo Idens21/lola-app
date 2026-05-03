@@ -1361,6 +1361,30 @@ const QUICK_PORTIONS = [
   { label: "½ portie", grams: 75 },
 ];
 
+function MacroRing({ value, goal, color, label, size = 64 }) {
+  const r = (size - 8) / 2;
+  const circ = 2 * Math.PI * r;
+  const pct = goal > 0 ? Math.min(value / goal, 1) : 0;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+      <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={COLORS.roseBorder} strokeWidth={6} />
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={6}
+          strokeDasharray={`${circ}`} strokeDashoffset={`${circ * (1 - pct)}`}
+          strokeLinecap="round" style={{ transition: "stroke-dashoffset 0.5s" }} />
+        <text x={size/2} y={size/2} textAnchor="middle" dominantBaseline="middle"
+          style={{ transform: "rotate(90deg)", transformOrigin: `${size/2}px ${size/2}px` }}
+          fontSize={size > 80 ? 15 : 11} fontWeight={600} fill={COLORS.text} fontFamily="DM Sans, sans-serif">
+          {value}
+        </text>
+      </svg>
+      <div style={{ fontSize: 10, color: COLORS.muted, textAlign: "center" }}>
+        {label}{goal > 0 ? <><br /><span style={{ color: pct >= 1 ? "#5CB85C" : COLORS.muted }}>/{goal}</span></> : ""}
+      </div>
+    </div>
+  );
+}
+
 function FoodScreen({ user }) {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [grams, setGrams] = useState("100");
@@ -1368,6 +1392,7 @@ function FoodScreen({ user }) {
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [meals, setMeals] = useState({ ontbijt: [], lunch: [], diner: [], snack: [] });
+  const [loadingMeals, setLoadingMeals] = useState(true);
   const [activeMeal, setActiveMeal] = useState("ontbijt");
   const [showManual, setShowManual] = useState(false);
   const [manualName, setManualName] = useState("");
@@ -1379,7 +1404,7 @@ function FoodScreen({ user }) {
   const [recentItems, setRecentItems] = useState([]);
   const [visionLoading, setVisionLoading] = useState(false);
   const [visionResults, setVisionResults] = useState([]);
-  const [editingItem, setEditingItem] = useState(null); // { meal, index, grams }
+  const [editingItem, setEditingItem] = useState(null);
   const [goals, setGoals] = useState({ kcal: 0, protein: 0, fat: 0 });
   const photoRef = useRef(null);
 
@@ -1388,33 +1413,55 @@ function FoodScreen({ user }) {
     { kcal: 0, protein: 0, carbs: 0, fat: 0 }
   );
 
-  // Laad doelen en recente items
+  // Laad vandaag's voedingslogs + doelen + recente items
   useEffect(() => {
-    if (!user) return;
-    supabase.from("profiles").select("kcal_goal,protein_goal,fat_goal").eq("id", user.id).maybeSingle()
-      .then(({ data }) => { if (data) setGoals({ kcal: data.kcal_goal || 0, protein: data.protein_goal || 0, fat: data.fat_goal || 0 }); });
-  }, [user]);
+    if (!user) { setLoadingMeals(false); return; }
+    const start = new Date(); start.setHours(0, 0, 0, 0);
+    const end = new Date(); end.setHours(23, 59, 59, 999);
 
-  useEffect(() => {
-    if (!user) return;
-    supabase.from("food_logs").select("product_name,kcal,protein,carbs,fat,kcal_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g").eq("user_id", user.id)
-      .order("created_at", { ascending: false }).limit(50)
-      .then(({ data }) => {
-        if (!data) return;
-        const seen = new Set();
-        const unique = data.filter(f => {
-          if (seen.has(f.product_name)) return false;
-          seen.add(f.product_name);
-          return true;
-        }).slice(0, 8).map(f => ({ name: f.product_name, kcal: f.kcal, protein: f.protein, carbs: f.carbs, fat: f.fat, source: "recent" }));
-        setRecentItems(unique);
+    Promise.all([
+      supabase.from("food_logs").select("*").eq("user_id", user.id)
+        .gte("created_at", start.toISOString()).lte("created_at", end.toISOString())
+        .order("created_at", { ascending: true }),
+      supabase.from("profiles").select("kcal_goal,protein_goal,fat_goal").eq("id", user.id).maybeSingle(),
+      supabase.from("food_logs").select("product_name,kcal_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g")
+        .eq("user_id", user.id).order("created_at", { ascending: false }).limit(60),
+    ]).then(([{ data: logs }, { data: profile }, { data: recentLogs }]) => {
+      // Groepeer logs per maaltijd
+      const grouped = { ontbijt: [], lunch: [], diner: [], snack: [] };
+      (logs || []).forEach(f => {
+        const meal = f.meal || "snack";
+        if (grouped[meal]) grouped[meal].push({
+          id: f.id,
+          name: f.product_name,
+          grams: f.grams || 100,
+          kcal: f.kcal, protein: f.protein, carbs: f.carbs, fat: f.fat,
+          per100: f.kcal_per_100g ? { kcal: f.kcal_per_100g, protein: f.protein_per_100g, carbs: f.carbs_per_100g, fat: f.fat_per_100g } : null,
+        });
       });
+      setMeals(grouped);
+      setLoadingMeals(false);
+
+      if (profile) setGoals({ kcal: profile.kcal_goal || 0, protein: profile.protein_goal || 0, fat: profile.fat_goal || 0 });
+
+      // Recente items: unieke producten met per-100g waarden
+      const seen = new Set();
+      const unique = (recentLogs || []).filter(f => {
+        if (seen.has(f.product_name)) return false;
+        seen.add(f.product_name);
+        return f.kcal_per_100g > 0;
+      }).slice(0, 8).map(f => ({
+        name: f.product_name,
+        kcal: f.kcal_per_100g, protein: f.protein_per_100g,
+        carbs: f.carbs_per_100g, fat: f.fat_per_100g, source: "recent"
+      }));
+      setRecentItems(unique);
+    });
   }, [user]);
 
   async function saveToSharedDB(product) {
-    // Sla op in gedeelde productendatabase — upsert op naam
     const { data: existing } = await supabase.from("food_products").select("id,times_logged").eq("name", product.name).limit(1);
-    if (existing && existing.length > 0) {
+    if (existing?.length > 0) {
       await supabase.from("food_products").update({ times_logged: (existing[0].times_logged || 1) + 1, updated_at: new Date().toISOString() }).eq("id", existing[0].id);
     } else {
       await supabase.from("food_products").insert({ name: product.name, brand: product.brand || "", kcal: product.kcal, protein: product.protein, carbs: product.carbs, fat: product.fat });
@@ -1443,125 +1490,101 @@ function FoodScreen({ user }) {
 
   async function search() {
     if (!query.trim()) return;
-    setSearching(true);
-    setResults([]);
-    setVisionResults([]);
+    setSearching(true); setResults([]); setVisionResults([]);
     const [local, off] = await Promise.all([searchLocal(query), searchOFF(query)]);
-    // Lola DB eerst, dan OFF (geen USDA meer — was te traag)
     const combined = [...local, ...off.filter(o => !local.some(l => l.name.toLowerCase() === o.name.toLowerCase()))];
     setResults(combined.slice(0, 12));
     setSearching(false);
   }
 
   async function scanPhoto(file) {
-    setVisionLoading(true);
-    setResults([]);
-    try {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const base64 = e.target.result.split(",")[1];
-        const mediaType = file.type || "image/jpeg";
-        const res = await fetch("/api/food-vision", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ image: base64, mediaType }),
-        });
+    setVisionLoading(true); setResults([]);
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const res = await fetch("/api/food-vision", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: e.target.result.split(",")[1], mediaType: file.type || "image/jpeg" }) });
         const data = await res.json();
         setVisionResults(data.products || []);
-        setVisionLoading(false);
-      };
-      reader.readAsDataURL(file);
-    } catch {
-      setVisionLoading(false);
-    }
+      } finally { setVisionLoading(false); }
+    };
+    reader.readAsDataURL(file);
   }
 
   async function addProduct(product, gramsAmount = 100) {
-    const factor = gramsAmount / 100;
-    // Sla per-100g waarden op voor herberekening
     const per100 = { kcal: product.kcal, protein: product.protein, carbs: product.carbs, fat: product.fat };
-    const scaled = { name: product.name, brand: product.brand, grams: gramsAmount, per100,
+    const factor = gramsAmount / 100;
+    const scaled = { name: product.name, grams: gramsAmount, per100,
       kcal: Math.round(per100.kcal * factor), protein: Math.round(per100.protein * factor),
       carbs: Math.round(per100.carbs * factor), fat: Math.round(per100.fat * factor) };
+
+    if (user) {
+      const { data: inserted } = await supabase.from("food_logs").insert({
+        user_id: user.id, meal: activeMeal, product_name: product.name,
+        grams: gramsAmount, kcal: scaled.kcal, protein: scaled.protein, carbs: scaled.carbs, fat: scaled.fat,
+        kcal_per_100g: per100.kcal, protein_per_100g: per100.protein, carbs_per_100g: per100.carbs, fat_per_100g: per100.fat,
+      }).select().single();
+      if (inserted) scaled.id = inserted.id;
+      saveToSharedDB({ name: product.name, brand: product.brand || "", ...per100 });
+    }
+
     setMeals(prev => ({ ...prev, [activeMeal]: [...prev[activeMeal], scaled] }));
     setResults([]); setVisionResults([]); setQuery(""); setSelectedProduct(null);
-    if (user) {
-      await Promise.all([
-        supabase.from("food_logs").insert({ user_id: user.id, meal: activeMeal, product_name: product.name,
-          grams: gramsAmount, kcal: scaled.kcal, protein: scaled.protein, carbs: scaled.carbs, fat: scaled.fat,
-          kcal_per_100g: per100.kcal, protein_per_100g: per100.protein, carbs_per_100g: per100.carbs, fat_per_100g: per100.fat }),
-        saveToSharedDB({ name: product.name, brand: product.brand || "", ...per100 }),
-      ]);
-      setRecentItems(prev => {
-        const filtered = prev.filter(r => r.name !== product.name);
-        return [{ name: product.name, ...per100, source: "recent" }, ...filtered].slice(0, 8);
-      });
-    }
+    setRecentItems(prev => {
+      const filtered = prev.filter(r => r.name !== product.name);
+      return [{ name: product.name, ...per100, source: "recent" }, ...filtered].slice(0, 8);
+    });
   }
 
   function updatePortion(meal, index, newGrams) {
     setMeals(prev => {
       const updated = [...prev[meal]];
       const item = updated[index];
-      const factor = newGrams / 100;
-      updated[index] = { ...item, grams: newGrams, kcal: Math.round(item.per100.kcal * factor), protein: Math.round(item.per100.protein * factor), carbs: Math.round(item.per100.carbs * factor), fat: Math.round(item.per100.fat * factor) };
+      if (!item.per100) return prev;
+      const f = newGrams / 100;
+      updated[index] = { ...item, grams: newGrams, kcal: Math.round(item.per100.kcal * f), protein: Math.round(item.per100.protein * f), carbs: Math.round(item.per100.carbs * f), fat: Math.round(item.per100.fat * f) };
       return { ...prev, [meal]: updated };
     });
   }
 
-  function removeProduct(meal, index) {
+  async function removeProduct(meal, index) {
+    const item = meals[meal][index];
     setMeals(prev => ({ ...prev, [meal]: prev[meal].filter((_, i) => i !== index) }));
     if (editingItem?.meal === meal && editingItem?.index === index) setEditingItem(null);
+    if (item.id && user) await supabase.from("food_logs").delete().eq("id", item.id);
   }
 
-  const ProductRow = ({ p, onSelect }) => (
-    <div onClick={() => onSelect(p)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `0.5px solid ${COLORS.roseBorder}`, cursor: "pointer" }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
-        <div style={{ fontSize: 10, color: COLORS.muted }}>{p.brand ? `${p.brand} · ` : ""}{p.kcal} kcal/100g · {p.source}</div>
-      </div>
-      <div style={{ fontSize: 12, color: COLORS.rose, fontWeight: 600, marginLeft: 10, flexShrink: 0 }}>+</div>
-    </div>
-  );
+  const mealKcal = (meal) => meals[meal].reduce((s, p) => s + (p.kcal || 0), 0);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div style={{ fontSize: 22, fontWeight: 500, color: COLORS.text }}>Voeding <span style={{ fontWeight: 300 }}>vandaag</span></div>
 
-      {/* Totalen met voortgang */}
-      <div style={{ display: "flex", gap: 8 }}>
-        {[
-          { lbl: "kcal", val: totals.kcal, goal: goals.kcal },
-          { lbl: "eiwit", val: `${totals.protein}g`, goal: goals.protein, raw: totals.protein },
-          { lbl: "koolhyd.", val: `${totals.carbs}g`, goal: 0 },
-          { lbl: "vet", val: `${totals.fat}g`, goal: goals.fat, raw: totals.fat },
-        ].map(({ lbl, val, goal, raw }) => {
-          const progress = goal > 0 ? Math.min((raw ?? totals.kcal) / goal, 1) : null;
-          return (
-            <div key={lbl} style={{ flex: 1, background: COLORS.roseLight, borderRadius: 16, padding: "12px 8px", textAlign: "center", border: `0.5px solid ${COLORS.roseBorder}` }}>
-              <div style={{ fontSize: 16, fontWeight: 500, color: COLORS.text }}>{val}</div>
-              <div style={{ fontSize: 10, color: COLORS.muted, marginTop: 3 }}>{lbl}</div>
-              {progress !== null && (
-                <div style={{ marginTop: 5, height: 3, background: "rgba(0,0,0,0.08)", borderRadius: 4, overflow: "hidden" }}>
-                  <div style={{ width: `${progress * 100}%`, height: "100%", background: progress >= 1 ? "#A0E8C4" : COLORS.rose, borderRadius: 4, transition: "width 0.3s" }} />
-                </div>
-              )}
-              {goal > 0 && <div style={{ fontSize: 9, color: COLORS.muted, marginTop: 2 }}>/ {goal}{lbl === "kcal" ? "" : "g"}</div>}
-            </div>
-          );
-        })}
-      </div>
+      {/* Macro-ringen */}
+      <Card>
+        <div style={{ display: "flex", justifyContent: "space-around", alignItems: "flex-start", padding: "4px 0" }}>
+          <MacroRing value={totals.kcal} goal={goals.kcal} color={COLORS.rose} label="kcal" size={80} />
+          <MacroRing value={totals.protein} goal={goals.protein} color="#A0C4E8" label="eiwit g" size={64} />
+          <MacroRing value={totals.carbs} goal={0} color="#A0E8C4" label="koolhyd g" size={64} />
+          <MacroRing value={totals.fat} goal={goals.fat} color="#E8C4A0" label="vet g" size={64} />
+        </div>
+        {goals.kcal > 0 && (
+          <div style={{ textAlign: "center", fontSize: 11, color: totals.kcal > goals.kcal ? COLORS.rose : COLORS.muted, marginTop: 6 }}>
+            {totals.kcal > goals.kcal ? `${totals.kcal - goals.kcal} kcal over doel` : `Nog ${goals.kcal - totals.kcal} kcal over`}
+          </div>
+        )}
+      </Card>
 
-      {/* Maaltijd selector */}
+      {/* Maaltijd tabs */}
       <div style={{ display: "flex", gap: 8 }}>
         {["ontbijt", "lunch", "diner", "snack"].map(meal => (
           <button key={meal} onClick={() => setActiveMeal(meal)} style={{ flex: 1, padding: "8px 4px", borderRadius: 16, border: `1.5px solid ${activeMeal === meal ? COLORS.rose : COLORS.roseBorder}`, background: activeMeal === meal ? COLORS.roseLight : COLORS.white, color: activeMeal === meal ? COLORS.rose : COLORS.muted, fontSize: 11, fontWeight: activeMeal === meal ? 500 : 400, cursor: "pointer", fontFamily: "inherit", textTransform: "capitalize" }}>
             {meal}
+            {meals[meal].length > 0 && <div style={{ fontSize: 9, color: activeMeal === meal ? COLORS.rose : COLORS.muted }}>{mealKcal(meal)} kcal</div>}
           </button>
         ))}
       </div>
 
-      {/* Zoekbalk + foto */}
+      {/* Zoekbalk */}
       <div style={{ display: "flex", gap: 8 }}>
         <input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === "Enter" && search()} placeholder={`Zoek voor ${activeMeal}...`} style={{ flex: 1, minWidth: 0, padding: "12px 16px", borderRadius: 20, border: `1px solid ${COLORS.roseBorder}`, background: COLORS.white, color: COLORS.text, fontSize: 13, fontFamily: "inherit", outline: "none" }} />
         <button onClick={search} disabled={searching} style={{ padding: "12px 16px", borderRadius: 20, background: COLORS.rose, border: "none", color: COLORS.white, fontSize: 13, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>
@@ -1584,7 +1607,7 @@ function FoodScreen({ user }) {
         </Card>
       )}
 
-      {/* Foto-herkenning resultaten */}
+      {/* Foto-resultaten */}
       {visionResults.length > 0 && (
         <Card style={{ background: COLORS.softGreen, border: `0.5px solid ${COLORS.softGreenBorder}` }}>
           <Label>Herkend op foto ✦</Label>
@@ -1594,7 +1617,7 @@ function FoodScreen({ user }) {
                 <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.text }}>{p.name}</div>
                 <div style={{ fontSize: 10, color: COLORS.muted }}>~{p.grams_estimate || 100}g · {p.kcal} kcal/100g</div>
               </div>
-              <div style={{ fontSize: 13, color: COLORS.rose, fontWeight: 600 }}>+</div>
+              <span style={{ fontSize: 16, color: COLORS.rose }}>+</span>
             </div>
           ))}
         </Card>
@@ -1604,30 +1627,41 @@ function FoodScreen({ user }) {
       {results.length > 0 && (
         <Card>
           <Label>Resultaten</Label>
-          {results.map((p, i) => <ProductRow key={i} p={p} onSelect={p => { setSelectedProduct(p); setGrams("100"); }} />)}
+          {results.map((p, i) => (
+            <div key={i} onClick={() => { setSelectedProduct(p); setGrams("100"); }} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `0.5px solid ${COLORS.roseBorder}`, cursor: "pointer" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
+                <div style={{ fontSize: 10, color: COLORS.muted }}>{p.brand ? `${p.brand} · ` : ""}{p.kcal} kcal · {p.protein}g eiwit · {p.fat}g vet per 100g · <span style={{ color: p.source === "Lola DB" ? COLORS.rose : COLORS.muted }}>{p.source}</span></div>
+              </div>
+              <span style={{ fontSize: 18, color: COLORS.rose, marginLeft: 10, flexShrink: 0 }}>+</span>
+            </div>
+          ))}
         </Card>
       )}
 
       {/* Recente items */}
-      {recentItems.length > 0 && results.length === 0 && !visionResults.length && (
+      {recentItems.length > 0 && !results.length && !visionResults.length && (
         <Card>
           <Label>Recent gelogd</Label>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
             {recentItems.map((p, i) => (
-              <button key={i} onClick={() => addProduct(p, 100)} style={{ padding: "8px 14px", borderRadius: 20, background: COLORS.roseLight, border: `0.5px solid ${COLORS.roseBorder}`, fontSize: 12, color: COLORS.text, cursor: "pointer", fontFamily: "inherit", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 1 }}>
-                <span style={{ fontWeight: 500 }}>{p.name}</span>
-                <span style={{ fontSize: 10, color: COLORS.muted }}>{p.kcal} kcal/100g</span>
+              <button key={i} onClick={() => { setSelectedProduct(p); setGrams("100"); }} style={{ padding: "8px 14px", borderRadius: 20, background: COLORS.roseLight, border: `0.5px solid ${COLORS.roseBorder}`, fontSize: 12, color: COLORS.text, cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+                <div style={{ fontWeight: 500 }}>{p.name}</div>
+                <div style={{ fontSize: 10, color: COLORS.muted }}>{p.kcal} kcal · {p.protein}g eiwit per 100g</div>
               </button>
             ))}
           </div>
         </Card>
       )}
 
-      {/* Gram selector */}
+      {/* Portie kiezen */}
       {selectedProduct && (
-        <Card>
-          <Label>Hoeveel van {selectedProduct.name}?</Label>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10, marginTop: 6 }}>
+        <Card style={{ border: `1.5px solid ${COLORS.rose}` }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <Label>{selectedProduct.name}</Label>
+            <button onClick={() => setSelectedProduct(null)} style={{ background: "none", border: "none", color: COLORS.muted, cursor: "pointer", fontSize: 18 }}>×</button>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
             {QUICK_PORTIONS.map(qp => (
               <button key={qp.label} onClick={() => setGrams(String(qp.grams))} style={{ padding: "7px 14px", borderRadius: 20, border: `1.5px solid ${grams === String(qp.grams) ? COLORS.rose : COLORS.roseBorder}`, background: grams === String(qp.grams) ? COLORS.roseLight : COLORS.white, color: grams === String(qp.grams) ? COLORS.rose : COLORS.muted, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>
                 {qp.label}
@@ -1639,71 +1673,54 @@ function FoodScreen({ user }) {
             <span style={{ fontSize: 13, color: COLORS.muted, flexShrink: 0 }}>gram</span>
             <button onClick={() => addProduct(selectedProduct, Number(grams) || 100)} style={{ padding: "11px 20px", borderRadius: 16, background: COLORS.rose, border: "none", color: COLORS.white, fontSize: 13, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>Voeg toe</button>
           </div>
-          <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 8 }}>
-            {Math.round(selectedProduct.kcal * (Number(grams) || 100) / 100)} kcal · {Math.round(selectedProduct.protein * (Number(grams) || 100) / 100)}g eiwit · {Math.round(selectedProduct.fat * (Number(grams) || 100) / 100)}g vet
+          <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 8, display: "flex", gap: 12 }}>
+            <span><strong style={{ color: COLORS.text }}>{Math.round(selectedProduct.kcal * (Number(grams) || 100) / 100)}</strong> kcal</span>
+            <span><strong style={{ color: COLORS.text }}>{Math.round(selectedProduct.protein * (Number(grams) || 100) / 100)}g</strong> eiwit</span>
+            <span><strong style={{ color: COLORS.text }}>{Math.round(selectedProduct.fat * (Number(grams) || 100) / 100)}g</strong> vet</span>
           </div>
         </Card>
       )}
 
-      {/* Handmatig toevoegen */}
-      {showManual && (
-        <Card>
-          <Label>Zelf toevoegen</Label>
-          <input placeholder="Productnaam" value={manualName} onChange={e => setManualName(e.target.value)} style={{ width: "100%", padding: "10px 14px", borderRadius: 14, border: `1px solid ${COLORS.roseBorder}`, fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 8 }} />
-          <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-            {[["gram", manualGrams, setManualGrams], ["kcal/100g", manualKcal, setManualKcal], ["eiwit", manualProtein, setManualProtein], ["koolhyd.", manualCarbs, setManualCarbs], ["vet", manualFat, setManualFat]].map(([lbl, val, setter]) => (
-              <div key={lbl} style={{ flex: 1 }}>
-                <div style={{ fontSize: 10, color: COLORS.muted, marginBottom: 4 }}>{lbl}</div>
-                <input type="number" value={val} onChange={e => setter(e.target.value)} style={{ width: "100%", padding: "8px", borderRadius: 12, border: `1px solid ${COLORS.roseBorder}`, fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }} />
-              </div>
-            ))}
-          </div>
-          <button onClick={() => {
-            if (!manualName) return;
-            const factor = (Number(manualGrams) || 100) / 100;
-            addProduct({ name: manualName, kcal: Math.round((Number(manualKcal) || 0)), protein: Math.round((Number(manualProtein) || 0)), carbs: Math.round((Number(manualCarbs) || 0)), fat: Math.round((Number(manualFat) || 0)) }, Number(manualGrams) || 100);
-            setManualName(""); setManualKcal(""); setManualProtein(""); setManualCarbs(""); setManualFat(""); setManualGrams("100"); setShowManual(false);
-          }} style={{ width: "100%", padding: "11px", borderRadius: 20, background: COLORS.rose, border: "none", color: COLORS.white, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
-            Toevoegen aan {activeMeal}
-          </button>
-        </Card>
-      )}
+      {/* Maaltijdlijst */}
+      {loadingMeals && <div style={{ textAlign: "center", color: COLORS.muted, fontSize: 13, padding: 20 }}>Laden...</div>}
 
-      {/* Gelogde maaltijden */}
-      {["ontbijt", "lunch", "diner", "snack"].map(meal => meals[meal].length > 0 && (
+      {!loadingMeals && ["ontbijt", "lunch", "diner", "snack"].map(meal => meals[meal].length > 0 && (
         <Card key={meal}>
-          <Label style={{ textTransform: "capitalize" }}>{meal}</Label>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <Label style={{ textTransform: "capitalize" }}>{meal}</Label>
+            <span style={{ fontSize: 11, color: COLORS.muted }}>{mealKcal(meal)} kcal</span>
+          </div>
           {meals[meal].map((p, i) => {
             const isEditing = editingItem?.meal === meal && editingItem?.index === i;
             return (
               <div key={i}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: isEditing ? "none" : `0.5px solid ${COLORS.roseBorder}` }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, color: COLORS.text }}>{p.name} <span style={{ color: COLORS.muted, fontSize: 11 }}>{p.grams}g</span></div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, color: COLORS.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name} <span style={{ color: COLORS.muted, fontSize: 11 }}>{p.grams}g</span></div>
                     <div style={{ fontSize: 11, color: COLORS.muted }}>{p.protein}g eiwit · {p.carbs}g koolhyd · {p.fat}g vet</div>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 12, color: COLORS.rose, fontWeight: 500 }}>{p.kcal} kcal</span>
-                    {p.per100 && <button onClick={() => setEditingItem(isEditing ? null : { meal, index: i, grams: p.grams })} style={{ background: "none", border: "none", color: COLORS.muted, cursor: "pointer", fontSize: 14, padding: 0 }}>✏️</button>}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                    <span style={{ fontSize: 12, color: COLORS.rose, fontWeight: 600 }}>{p.kcal}</span>
+                    {p.per100 && <button onClick={() => setEditingItem(isEditing ? null : { meal, index: i, grams: p.grams })} style={{ background: "none", border: "none", color: COLORS.muted, cursor: "pointer", fontSize: 13, padding: 0 }}>✏️</button>}
                     <button onClick={() => removeProduct(meal, i)} style={{ background: "none", border: "none", color: COLORS.muted, cursor: "pointer", fontSize: 18, padding: 0, lineHeight: 1 }}>×</button>
                   </div>
                 </div>
                 {isEditing && p.per100 && (
-                  <div style={{ padding: "10px 0 12px", borderBottom: `0.5px solid ${COLORS.roseBorder}` }}>
-                    <div style={{ fontSize: 11, color: COLORS.muted, marginBottom: 6 }}>Pas grammen aan — macros worden herberekend</div>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+                  <div style={{ background: COLORS.roseLight, borderRadius: 12, padding: "10px 12px", marginBottom: 4 }}>
+                    <div style={{ fontSize: 11, color: COLORS.muted, marginBottom: 6 }}>Grammen aanpassen — macros worden herberekend</div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
                       {QUICK_PORTIONS.map(qp => (
                         <button key={qp.label} onClick={() => { setEditingItem(e => ({ ...e, grams: qp.grams })); updatePortion(meal, i, qp.grams); }}
-                          style={{ padding: "5px 12px", borderRadius: 20, border: `1.5px solid ${editingItem.grams === qp.grams ? COLORS.rose : COLORS.roseBorder}`, background: editingItem.grams === qp.grams ? COLORS.roseLight : COLORS.white, color: editingItem.grams === qp.grams ? COLORS.rose : COLORS.muted, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>
+                          style={{ padding: "4px 10px", borderRadius: 20, border: `1px solid ${editingItem.grams === qp.grams ? COLORS.rose : COLORS.roseBorder}`, background: editingItem.grams === qp.grams ? COLORS.white : "transparent", fontSize: 11, cursor: "pointer", fontFamily: "inherit", color: editingItem.grams === qp.grams ? COLORS.rose : COLORS.muted }}>
                           {qp.label}
                         </button>
                       ))}
                     </div>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <input type="number" value={editingItem.grams} onChange={e => { const g = Number(e.target.value); setEditingItem(ev => ({ ...ev, grams: g })); updatePortion(meal, i, g); }}
-                        style={{ width: 80, padding: "8px 12px", borderRadius: 12, border: `1px solid ${COLORS.roseBorder}`, fontSize: 13, fontFamily: "inherit", outline: "none" }} />
-                      <span style={{ fontSize: 12, color: COLORS.muted }}>gram · {Math.round(p.per100.kcal * editingItem.grams / 100)} kcal</span>
-                      <button onClick={() => setEditingItem(null)} style={{ marginLeft: "auto", padding: "7px 14px", borderRadius: 20, background: COLORS.rose, border: "none", color: COLORS.white, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>Klaar</button>
+                      <input type="number" value={editingItem.grams} onChange={e => { const g = Number(e.target.value) || 0; setEditingItem(ev => ({ ...ev, grams: g })); updatePortion(meal, i, g); }}
+                        style={{ width: 72, padding: "7px 10px", borderRadius: 10, border: `1px solid ${COLORS.roseBorder}`, fontSize: 13, fontFamily: "inherit", outline: "none", background: COLORS.white }} />
+                      <span style={{ fontSize: 11, color: COLORS.muted }}>{Math.round(p.per100.kcal * (editingItem.grams || 0) / 100)} kcal</span>
+                      <button onClick={() => setEditingItem(null)} style={{ marginLeft: "auto", padding: "6px 14px", borderRadius: 20, background: COLORS.rose, border: "none", color: COLORS.white, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>Klaar</button>
                     </div>
                   </div>
                 )}
@@ -1712,6 +1729,32 @@ function FoodScreen({ user }) {
           })}
         </Card>
       ))}
+
+      {/* Handmatig */}
+      {showManual && (
+        <Card>
+          <Label>Handmatig toevoegen</Label>
+          <input placeholder="Productnaam" value={manualName} onChange={e => setManualName(e.target.value)} style={{ width: "100%", padding: "10px 14px", borderRadius: 14, border: `1px solid ${COLORS.roseBorder}`, fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginTop: 8, marginBottom: 8 }} />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", gap: 6, marginBottom: 8 }}>
+            {[["gram", manualGrams, setManualGrams], ["kcal/100g", manualKcal, setManualKcal], ["eiwit g", manualProtein, setManualProtein], ["koolhyd g", manualCarbs, setManualCarbs], ["vet g", manualFat, setManualFat]].map(([lbl, val, setter]) => (
+              <div key={lbl}>
+                <div style={{ fontSize: 9, color: COLORS.muted, marginBottom: 3 }}>{lbl}</div>
+                <input type="number" value={val} onChange={e => setter(e.target.value)} style={{ width: "100%", padding: "8px 6px", borderRadius: 10, border: `1px solid ${COLORS.roseBorder}`, fontSize: 12, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }} />
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => {
+              if (!manualName) return;
+              addProduct({ name: manualName, kcal: Number(manualKcal) || 0, protein: Number(manualProtein) || 0, carbs: Number(manualCarbs) || 0, fat: Number(manualFat) || 0 }, Number(manualGrams) || 100);
+              setManualName(""); setManualKcal(""); setManualProtein(""); setManualCarbs(""); setManualFat(""); setManualGrams("100"); setShowManual(false);
+            }} style={{ flex: 1, padding: "11px", borderRadius: 20, background: COLORS.rose, border: "none", color: COLORS.white, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
+              Toevoegen
+            </button>
+            <button onClick={() => setShowManual(false)} style={{ padding: "11px 16px", borderRadius: 20, background: "transparent", border: `1px solid ${COLORS.roseBorder}`, color: COLORS.muted, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Annuleer</button>
+          </div>
+        </Card>
+      )}
 
       <button onClick={() => setShowManual(!showManual)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px", borderRadius: 20, border: `1.5px dashed ${COLORS.roseBorder}`, background: "transparent", color: COLORS.rose, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
         + Handmatig toevoegen
