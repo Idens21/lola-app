@@ -717,9 +717,6 @@ const [grams, setGrams] = useState("100");
   }
 
   async function addProduct(product, gramsAmount = 100) {
-
-
-async function addProduct(product, gramsAmount = 100) {
     const factor = gramsAmount / 100;
     const scaled = {
       ...product,
