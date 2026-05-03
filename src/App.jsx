@@ -609,21 +609,102 @@ function CheckInScreen({ onDone, user }) {
 }
 
 // ── LOLA CHAT ─────────────────────────────────────────────
-function LolaScreen({ profile }) {
-  const [messages, setMessages] = useState([
-    { from: "lola", text: `Hoi ${profile?.facts?.name || "liefste"} ✦ Ik ben er. Wat speelt er vandaag?` }
-  ]);
+function LolaScreen({ profile, user }) {
+  const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
+  const [contextData, setContextData] = useState(null);
   const bottomRef = useRef(null);
-
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
-const LOLA_SYSTEM = `Je bent Lola, een warme maar eerlijke persoonlijke levenscoach. Je kent deze persoon goed vanuit de intake.
-Naam: ${profile?.facts?.name}. Human design: ${profile?.facts?.hdtype || "onbekend"}. Cyclus: ${profile?.facts?.cyclelength}.
-Je bent altijd beschikbaar — voor grote levensvragen én kleine dagelijkse dingen. Over relaties, werk, familie, twijfels, vreugde — alles.
-Stel één vraag per keer. Reageer warm maar eerlijk. Durf te spiegelen. Houd berichten kort. Schrijf in het Nederlands.`;
+  useEffect(() => {
+    if (!user) { setDataLoaded(true); return; }
+    const today = new Date().toISOString().slice(0, 10);
+    const twoWeeksAgo = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
+    Promise.all([
+      supabase.from("checkins").select("*").eq("user_id", user.id).gte("created_at", twoWeeksAgo).order("created_at", { ascending: false }),
+      supabase.from("food_logs").select("*").eq("user_id", user.id).gte("created_at", today).lte("created_at", today + "T23:59:59"),
+    ]).then(([{ data: checkins }, { data: food }]) => {
+      setContextData({ checkins: checkins || [], food: food || [] });
+      setDataLoaded(true);
+    });
+  }, [user]);
+
+  useEffect(() => {
+    if (!dataLoaded) return;
+    const name = profile?.facts?.name || "liefste";
+    setMessages([{ from: "lola", text: `Hoi ${name} ✦ Ik ben er. Wat speelt er vandaag?` }]);
+  }, [dataLoaded]);
+
+  function buildLolaSystem() {
+    const facts = profile?.facts || {};
+    const { day: cycleDay, phase } = getCycleInfo(facts.lastperiod, facts.cyclelength);
+    const checkins = contextData?.checkins || [];
+    const food = contextData?.food || [];
+
+    // Vandaag check-in
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const todayCheckin = checkins.find(c => c.created_at?.slice(0, 10) === todayKey);
+    const MOODS = ["Zwaar", "Moeizaam", "Oké", "Fris", "Uitgerust"];
+
+    // Patroonanalyse laatste 7 check-ins
+    const recent = checkins.slice(0, 7);
+    const avgEnergy = recent.length
+      ? (recent.reduce((s, c) => s + (c.energy || 0), 0) / recent.length).toFixed(1)
+      : null;
+    const energyPattern = recent.map(c => c.energy).filter(Boolean);
+    const lowEnergyDays = energyPattern.filter(e => e <= 2).length;
+
+    const slaapVerdeling = {};
+    recent.forEach(c => { if (c.slept) slaapVerdeling[c.slept] = (slaapVerdeling[c.slept] || 0) + 1; });
+    const meesteSlaap = Object.entries(slaapVerdeling).sort((a, b) => b[1] - a[1])[0]?.[0];
+
+    // Voeding vandaag
+    const totalKcal = food.reduce((s, f) => s + (f.kcal || 0), 0);
+    const totalProtein = food.reduce((s, f) => s + (f.protein || 0), 0);
+
+    return `Je bent Lola, een warme maar eerlijke persoonlijke levenscoach voor vrouwen. Je kent ${facts.name || "haar"} goed en leest haar data actief mee.
+
+── PROFIEL ──
+Naam: ${facts.name || "onbekend"}
+Human Design type: ${facts.hdtype || "onbekend"}
+Gemiddelde cycluslengte: ${facts.cyclelength || "onbekend"}
+
+── CYCLUS VANDAAG ──
+Fase: ${phase.name}${cycleDay ? ` · dag ${cycleDay}` : ""}
+Wat dit betekent: ${phase.desc}
+
+── CHECK-IN VANDAAG ──
+${todayCheckin
+  ? `Stemming bij het opstaan: ${MOODS[todayCheckin.wake_mood] || "niet ingevuld"}
+Energieniveau: ${todayCheckin.energy || "?"}/5
+Slaap: ${todayCheckin.slept || "niet ingevuld"}
+Intentie: "${todayCheckin.intention || "geen"}"
+Notitie aan Lola: "${todayCheckin.note || "geen"}"`
+  : "Nog geen check-in vandaag gedaan."}
+
+── PATROON AFGELOPEN 7 DAGEN ──
+Gemiddeld energieniveau: ${avgEnergy || "onvoldoende data"}
+Dagen met lage energie (≤2): ${lowEnergyDays} van de ${recent.length}
+Meest voorkomende slaap: ${meesteSlaap || "onvoldoende data"}
+${lowEnergyDays >= 3 ? `⚠ Let op: ${lowEnergyDays} van de laatste ${recent.length} dagen had ze een energie van 2 of lager.` : ""}
+
+── VOEDING VANDAAG ──
+${food.length > 0
+  ? `Totaal: ${totalKcal} kcal · ${totalProtein}g eiwit
+Producten: ${food.map(f => f.product_name).join(", ")}`
+  : "Nog niets gelogd vandaag."}
+
+── HOE JE REAGEERT ──
+- Je benoemt proactief patronen die je ziet in de data, maar alleen als het relevant aanvoelt
+- Je verbindt data aan wat ze zegt: "Je energie was de afgelopen dagen laag én je hebt weinig gegeten — wat speelt er?"
+- Je stel altijd maar één vraag per bericht
+- Reageer warm maar eerlijk, durf te spiegelen
+- Houd berichten kort (max 3 zinnen + één vraag)
+- Schrijf in het Nederlands`;
+  }
 
   async function send() {
     if (!input.trim() || loading) return;
@@ -633,10 +714,17 @@ Stel één vraag per keer. Reageer warm maar eerlijk. Durf te spiegelen. Houd be
     setMessages(newMessages);
     setLoading(true);
     const apiMessages = newMessages.map((m) => ({ role: m.from === "user" ? "user" : "assistant", content: m.text }));
-    const reply = await askLola(apiMessages, LOLA_SYSTEM);
+    const reply = await askLola(apiMessages, buildLolaSystem());
     setMessages((prev) => [...prev, { from: "lola", text: reply }]);
     setLoading(false);
   }
+
+  if (!dataLoaded) return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "calc(100dvh - 160px)", gap: 12 }}>
+      <div style={{ fontSize: 28, color: COLORS.rose }}>✦</div>
+      <div style={{ fontSize: 13, color: COLORS.muted }}>Lola leest je gegevens...</div>
+    </div>
+  );
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "calc(100dvh - 160px)", width: "100%", maxWidth: "100%", overflow: "hidden" }}>
@@ -1275,7 +1363,7 @@ onSkip={async () => {
     checkin: <CheckInScreen user={user} onDone={() => setScreen("home")} />,
     food: <FoodScreen user={user} />,
     history: <HistoryScreen user={user} profile={profile} />,
-    lola: <LolaScreen profile={profile} />,
+    lola: <LolaScreen profile={profile} user={user} />,
   };
 
   return (
