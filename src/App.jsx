@@ -412,12 +412,23 @@ function WelcomeScreen({ profile, onStart }) {
 }
 
 // ── HOME SCREEN ───────────────────────────────────────────
-function HomeScreen({ profile, onCheckin }) {
+function HomeScreen({ profile, onCheckin, user, onPeriodLogged }) {
   const name = profile?.facts?.name || "liefste";
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Goedemorgen" : hour < 18 ? "Goedemiddag" : "Goedenavond";
   const today = new Date().toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long" });
   const { day: cycleDay, phase } = getCycleInfo(profile?.facts?.lastperiod, profile?.facts?.cyclelength);
+  const [loggingPeriod, setLoggingPeriod] = useState(false);
+  const [periodLogged, setPeriodLogged] = useState(false);
+
+  async function logNewPeriod() {
+    setLoggingPeriod(true);
+    const todayStr = new Date().toISOString().slice(0, 10);
+    await supabase.from("profiles").update({ lastperiod: todayStr }).eq("id", user.id);
+    setPeriodLogged(true);
+    setLoggingPeriod(false);
+    if (onPeriodLogged) onPeriodLogged(todayStr);
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -431,12 +442,21 @@ function HomeScreen({ profile, onCheckin }) {
         <div style={{ fontSize: 24, color: COLORS.rose }}>✦</div>
       </div>
 
-      <div style={{ background: COLORS.roseLight, borderRadius: 20, padding: "14px 18px", border: `0.5px solid ${COLORS.roseBorder}`, display: "flex", alignItems: "center", gap: 12 }}>
-        <div style={{ width: 10, height: 10, borderRadius: "50%", background: phase.color, flexShrink: 0 }} />
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.roseDark }}>{phase.name}{cycleDay ? ` · Dag ${cycleDay}` : ""}</div>
-          <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 2, lineHeight: 1.5 }}>{phase.desc}</div>
+      <div style={{ background: COLORS.roseLight, borderRadius: 20, padding: "14px 18px", border: `0.5px solid ${COLORS.roseBorder}` }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ width: 10, height: 10, borderRadius: "50%", background: phase.color, flexShrink: 0 }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.roseDark }}>{phase.name}{cycleDay ? ` · Dag ${cycleDay}` : ""}</div>
+            <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 2, lineHeight: 1.5 }}>{phase.desc}</div>
+          </div>
         </div>
+        {periodLogged ? (
+          <div style={{ marginTop: 10, fontSize: 12, color: COLORS.rose, fontWeight: 500 }}>✦ Nieuwe cyclus gestart — dag 1!</div>
+        ) : (
+          <button onClick={logNewPeriod} disabled={loggingPeriod} style={{ marginTop: 10, background: "none", border: `1px solid ${COLORS.roseBorder}`, borderRadius: 20, padding: "5px 14px", fontSize: 11, color: COLORS.muted, cursor: "pointer", fontFamily: "inherit" }}>
+            {loggingPeriod ? "Opslaan..." : "↩ Mijn cyclus is begonnen"}
+          </button>
+        )}
       </div>
 
       <Card style={{ background: COLORS.cream, border: `0.5px solid ${COLORS.roseBorder}` }}>
@@ -619,7 +639,7 @@ Stel één vraag per keer. Reageer warm maar eerlijk. Durf te spiegelen. Houd be
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 140px)", width: "100%", maxWidth: "100%", overflowX: "hidden" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "calc(100dvh - 160px)", width: "100%", maxWidth: "100%", overflow: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
         <div style={{ width: 40, height: 40, borderRadius: "50%", background: COLORS.roseLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, border: `1px solid ${COLORS.roseBorder}` }}>✦</div>
         <div>
@@ -647,7 +667,7 @@ Stel één vraag per keer. Reageer warm maar eerlijk. Durf te spiegelen. Houd be
         <div ref={bottomRef} />
       </div>
       <div style={{ display: "flex", gap: 10, paddingTop: 12, borderTop: `0.5px solid ${COLORS.roseBorder}` }}>
-        <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} placeholder="Zeg iets tegen Lola..." style={{ flex: 1, padding: "11px 16px", borderRadius: 24, border: `1px solid ${COLORS.roseBorder}`, background: COLORS.white, color: COLORS.text, fontSize: 13, fontFamily: "inherit", outline: "none" }} />
+        <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} placeholder="Zeg iets tegen Lola..." style={{ flex: 1, minWidth: 0, padding: "11px 16px", borderRadius: 24, border: `1px solid ${COLORS.roseBorder}`, background: COLORS.white, color: COLORS.text, fontSize: 13, fontFamily: "inherit", outline: "none" }} />
         <button onClick={send} disabled={loading} style={{ width: 44, height: 44, borderRadius: "50%", background: loading ? COLORS.roseBorder : COLORS.rose, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M8 3l5 5-5 5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
         </button>
@@ -996,9 +1016,9 @@ function HistoryScreen({ user, profile }) {
         <button onClick={() => setViewDate(new Date(year, month + 1, 1))} disabled={viewDate >= new Date(today.getFullYear(), today.getMonth(), 1)} style={{ background: "none", border: "none", cursor: viewDate >= new Date(today.getFullYear(), today.getMonth(), 1) ? "default" : "pointer", color: viewDate >= new Date(today.getFullYear(), today.getMonth(), 1) ? COLORS.roseBorder : COLORS.muted, fontSize: 20, padding: "4px 8px" }}>›</button>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, textAlign: "center" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3 }}>
         {["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"].map(d => (
-          <div key={d} style={{ fontSize: 10, color: COLORS.muted, fontWeight: 500, padding: "4px 0" }}>{d}</div>
+          <div key={d} style={{ fontSize: 10, color: COLORS.muted, fontWeight: 500, textAlign: "center", padding: "4px 0" }}>{d}</div>
         ))}
         {cells.map((dayNum, i) => {
           if (!dayNum) return <div key={i} />;
@@ -1016,17 +1036,18 @@ function HistoryScreen({ user, profile }) {
               onClick={() => isPast && setSelectedDay(selectedDay === dayNum ? null : dayNum)}
               style={{
                 display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                padding: "6px 0", borderRadius: 12, cursor: isPast ? "pointer" : "default",
+                aspectRatio: "1", padding: "2px", borderRadius: 10, cursor: isPast ? "pointer" : "default",
                 border: isToday ? `1.5px solid ${COLORS.rose}` : isSelected ? `1.5px solid ${COLORS.roseDark}` : "1.5px solid transparent",
                 background: isSelected ? COLORS.roseLight : "transparent",
-                opacity: isPast ? 1 : 0.3,
+                opacity: isPast ? 1 : 0.25,
+                overflow: "hidden",
               }}
             >
-              <div style={{ fontSize: 13, fontWeight: isToday ? 600 : 400, color: isToday ? COLORS.rose : COLORS.text, marginBottom: 3 }}>{dayNum}</div>
-              <div style={{ display: "flex", gap: 2, alignItems: "center", height: 10 }}>
-                {cycleInfo.day && <div style={{ width: 5, height: 5, borderRadius: "50%", background: cycleInfo.phase.color }} />}
-                {hasCheckin && <div style={{ width: 5, height: 5, borderRadius: "50%", background: COLORS.rose }} />}
-                {hasFood && <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#A0C4A8" }} />}
+              <div style={{ fontSize: 12, fontWeight: isToday ? 600 : 400, color: isToday ? COLORS.rose : COLORS.text, lineHeight: 1 }}>{dayNum}</div>
+              <div style={{ display: "flex", gap: 2, alignItems: "center", marginTop: 3, flexWrap: "nowrap" }}>
+                {cycleInfo.day && <div style={{ width: 4, height: 4, borderRadius: "50%", background: cycleInfo.phase.color, flexShrink: 0 }} />}
+                {hasCheckin && <div style={{ width: 4, height: 4, borderRadius: "50%", background: COLORS.rose, flexShrink: 0 }} />}
+                {hasFood && <div style={{ width: 4, height: 4, borderRadius: "50%", background: "#A0C4A8", flexShrink: 0 }} />}
               </div>
             </button>
           );
@@ -1250,7 +1271,7 @@ onSkip={async () => {
   const { day: cycleDay, phase: currentPhase } = getCycleInfo(profile?.facts?.lastperiod, profile?.facts?.cyclelength);
 
   const screenMap = {
-    home: <HomeScreen profile={profile} onCheckin={() => setScreen("checkin")} />,
+    home: <HomeScreen profile={profile} onCheckin={() => setScreen("checkin")} user={user} onPeriodLogged={(dateStr) => setProfile(p => ({ ...p, facts: { ...p.facts, lastperiod: dateStr } }))} />,
     checkin: <CheckInScreen user={user} onDone={() => setScreen("home")} />,
     food: <FoodScreen user={user} />,
     history: <HistoryScreen user={user} profile={profile} />,
