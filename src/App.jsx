@@ -279,17 +279,62 @@ function ProgressBar({ value, max }) {
 }
 function NavBar({ active, onChange }) {
   const items = [
-    { id: "home", label: "Home", icon: <svg viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.5"/></svg> },
-    { id: "checkin", label: "Check-in", icon: <svg viewBox="0 0 22 22" fill="none"><rect x="4" y="6" width="14" height="12" rx="3" stroke="currentColor" strokeWidth="1.5"/><path d="M8 11l2.5 2.5L14 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> },
-    { id: "food", label: "Voeding", icon: <svg viewBox="0 0 22 22" fill="none"><path d="M11 18C11 18 5 14 5 9C5 6 7.5 4 11 4C14.5 4 17 6 17 9C17 14 11 18 11 18Z" stroke="currentColor" strokeWidth="1.5"/><line x1="11" y1="18" x2="11" y2="11" stroke="currentColor" strokeWidth="1.5"/></svg> },
-    { id: "history", label: "Kalender", icon: <svg viewBox="0 0 22 22" fill="none"><rect x="3" y="5" width="16" height="14" rx="3" stroke="currentColor" strokeWidth="1.5"/><path d="M3 9h16" stroke="currentColor" strokeWidth="1.5"/><path d="M7 3v4M15 3v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="7" cy="13" r="1" fill="currentColor"/><circle cx="11" cy="13" r="1" fill="currentColor"/><circle cx="15" cy="13" r="1" fill="currentColor"/></svg> },
-    { id: "goals", label: "Doelen", icon: <svg viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="1.5"/><circle cx="11" cy="11" r="4" stroke="currentColor" strokeWidth="1.5"/><circle cx="11" cy="11" r="1.5" fill="currentColor"/></svg> },
-    { id: "lola", label: "Lola", icon: <svg viewBox="0 0 22 22" fill="none"><path d="M11 4l1.5 4.5H17l-3.8 2.8 1.5 4.5L11 13l-3.7 2.8 1.5-4.5L5 8.5h4.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg> },
+    {
+      id: "lola",
+      label: "Lola",
+      icon: (
+        <svg viewBox="0 0 22 22" fill="none">
+          <ellipse cx="11" cy="9" rx="4" ry="5" stroke="currentColor" strokeWidth="1.5"/>
+          <path d="M7 14c0 3 1.5 5 4 5s4-2 4-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          <path d="M11 4V2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+        </svg>
+      ),
+    },
+    {
+      id: "home",
+      label: "Vandaag",
+      icon: (
+        <svg viewBox="0 0 22 22" fill="none">
+          <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.5"/>
+          <path d="M11 7v4l2.5 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      ),
+    },
+    {
+      id: "loggen",
+      label: "Loggen",
+      icon: (
+        <svg viewBox="0 0 22 22" fill="none">
+          <rect x="4" y="4" width="14" height="14" rx="3" stroke="currentColor" strokeWidth="1.5"/>
+          <path d="M8 11h6M11 8v6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+        </svg>
+      ),
+    },
+    {
+      id: "history",
+      label: "Inzichten",
+      icon: (
+        <svg viewBox="0 0 22 22" fill="none">
+          <path d="M4 16l4-5 3 3 3-4 4 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <rect x="3" y="4" width="16" height="14" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+        </svg>
+      ),
+    },
+    {
+      id: "profile",
+      label: "Ik",
+      icon: (
+        <svg viewBox="0 0 22 22" fill="none">
+          <circle cx="11" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.5"/>
+          <path d="M4 19c0-3.866 3.134-7 7-7h0c3.866 0 7 3.134 7 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+        </svg>
+      ),
+    },
   ];
   return (
     <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: COLORS.cream, borderTop: `0.5px solid ${COLORS.roseBorder}`, display: "flex", justifyContent: "space-around", padding: "10px 0 env(safe-area-inset-bottom, 20px)", zIndex: 100 }}>
       {items.map((item) => (
-        <button key={item.id} onClick={() => onChange(item.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", color: active === item.id ? COLORS.rose : COLORS.muted, fontFamily: "inherit", fontSize: 10, fontWeight: active === item.id ? 500 : 400 }}>
+        <button key={item.id} onClick={() => onChange(item.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", color: active === item.id ? COLORS.rose : COLORS.muted, fontFamily: "inherit", fontSize: 10, fontWeight: active === item.id ? 500 : 400, padding: "4px 8px" }}>
           <div style={{ width: 22, height: 22 }}>{item.icon}</div>
           {item.label}
         </button>
@@ -2698,7 +2743,7 @@ Schrijf in het Nederlands. Max 450 woorden. Doorlopende tekst, geen kopjes. Verw
 export default function App() {
   const [phase, setPhase] = useState("auth");
   const [profile, setProfile] = useState(null);
-  const [screen, setScreen] = useState("home");
+  const [screen, setScreen] = useState("lola");
   const [user, setUser] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [checkinType, setCheckinType] = useState("ochtend");
@@ -2859,7 +2904,37 @@ onSkip={async () => {
 
   const { day: cycleDay, phase: currentPhase } = getCycleInfo(profile?.facts?.lastperiod, profile?.facts?.cyclelength);
 
+  // "loggen" tab: toon checkin-keuze + voedingstracker gecombineerd
+  function LoggenScreen() {
+    const hour = new Date().getHours();
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ fontSize: 22, fontWeight: 500, color: COLORS.text }}>Loggen</div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button
+            onClick={() => { setCheckinType("ochtend"); setScreen("checkin"); }}
+            style={{ flex: 1, padding: "16px 12px", borderRadius: 20, background: COLORS.roseLight, border: `1px solid ${COLORS.roseBorder}`, cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+            <div style={{ fontSize: 16, marginBottom: 4 }}>🌤</div>
+            <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.text }}>Ochtend check-in</div>
+            <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>Stemming, energie, slaap</div>
+          </button>
+          {hour >= 16 && (
+            <button
+              onClick={() => { setCheckinType("avond"); setScreen("checkin"); }}
+              style={{ flex: 1, padding: "16px 12px", borderRadius: 20, background: COLORS.lavender, border: `1px solid ${COLORS.lavenderBorder}`, cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+              <div style={{ fontSize: 16, marginBottom: 4 }}>🌙</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.text }}>Avond check-in</div>
+              <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>Dag, dankbaarheid</div>
+            </button>
+          )}
+        </div>
+        <FoodScreen user={user} />
+      </div>
+    );
+  }
+
   const screenMap = {
+    lola: <LolaScreen profile={profile} user={user} />,
     home: <HomeScreen
       key={refreshKey}
       profile={profile}
@@ -2868,17 +2943,23 @@ onSkip={async () => {
       user={user}
       onPeriodLogged={(dateStr) => setProfile(p => ({ ...p, facts: { ...p.facts, lastperiod: dateStr } }))}
     />,
-    checkin: <CheckInScreen key={checkinType} user={user} checkinType={checkinType} onDone={goHome} />,
+    loggen: <LoggenScreen />,
+    checkin: <CheckInScreen key={checkinType} user={user} checkinType={checkinType} onDone={() => { setScreen("loggen"); setRefreshKey(k => k + 1); }} />,
     food: <FoodScreen user={user} />,
     history: <HistoryScreen user={user} profile={profile} />,
     goals: <MonthlyGoalsScreen user={user} profile={profile} />,
-    lola: <LolaScreen profile={profile} user={user} />,
     profile: <ProfileScreen profile={profile} user={user} onProfileUpdated={(updated) => setProfile(p => ({ ...p, facts: updated }))} onRestartIntake={() => setPhase("chat")} />,
   };
 
+  // NavBar toont de 5 hoofd-tabs; checkin/food/goals vallen er buiten
+  const navScreen = ["lola", "home", "loggen", "history", "profile"].includes(screen) ? screen
+    : screen === "checkin" ? "loggen"
+    : screen === "food" ? "loggen"
+    : screen === "goals" ? "home"
+    : "lola";
+
   return (
     <div style={{ minHeight: "100vh", background: COLORS.cream, fontFamily: "'DM Sans','Helvetica Neue',sans-serif" }}>
-      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
       <style>{`
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { overflow-x: hidden; }
@@ -2886,26 +2967,23 @@ onSkip={async () => {
   ::-webkit-scrollbar { display: none; }
 `}</style>
       <div style={{ maxWidth: 480, margin: "0 auto", width: "100%", padding: "40px 20px 100px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 28 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ fontSize: 16, color: COLORS.rose }}>✦</span>
             <span style={{ fontSize: 18, fontWeight: 600, color: COLORS.text, letterSpacing: "-0.02em" }}>lola</span>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {cycleDay && (
             <div style={{ fontSize: 11, color: COLORS.muted, background: COLORS.roseLight, padding: "4px 12px", borderRadius: 20, border: `0.5px solid ${COLORS.roseBorder}` }}>
-              {cycleDay ? `Dag ${cycleDay}` : "Cyclus"}
+              Dag {cycleDay}
             </div>
-            <button onClick={() => setScreen("profile")} style={{ width: 32, height: 32, borderRadius: "50%", background: screen === "profile" ? COLORS.rose : COLORS.roseLight, border: `1px solid ${COLORS.roseBorder}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <svg width="14" height="14" viewBox="0 0 22 22" fill="none">
-                <circle cx="11" cy="8" r="4" stroke={screen === "profile" ? "white" : COLORS.rose} strokeWidth="1.5"/>
-                <path d="M4 19c0-3.314 3.134-6 7-6s7 2.686 7 6" stroke={screen === "profile" ? "white" : COLORS.rose} strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-            </button>
-          </div>
+          )}
         </div>
         {screenMap[screen]}
       </div>
-      <NavBar active={screen} onChange={navigateTo} />
+      <NavBar active={navScreen} onChange={(id) => {
+        if (id === "loggen") { setScreen("loggen"); }
+        else navigateTo(id);
+      }} />
     </div>
   );
 }
