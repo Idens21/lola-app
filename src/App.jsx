@@ -3047,6 +3047,281 @@ Schrijf in het Nederlands. Max 450 woorden. Doorlopende tekst, geen kopjes. Verw
   );
 }
 
+// ── INZICHTEN SCREEN ──────────────────────────────────────
+function InzichtenScreen({ user, profile }) {
+  const [tab, setTab] = useState("kalender");
+  const [patternData, setPatternData] = useState(null);
+  const [summaries, setSummaries] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const facts = profile?.facts || {};
+
+  useEffect(() => {
+    if (tab === "kalender" || !user) return;
+    setLoading(true);
+    const monthAgo = new Date(Date.now() - 90 * 86400000).toISOString();
+    Promise.all([
+      supabase.from("checkins").select("*").eq("user_id", user.id)
+        .gte("created_at", monthAgo).order("created_at", { ascending: false }),
+      supabase.from("food_logs").select("*").eq("user_id", user.id)
+        .gte("created_at", monthAgo).order("created_at", { ascending: false }),
+      supabase.from("lola_weekly_summaries").select("*").eq("user_id", user.id)
+        .order("week_start", { ascending: false }).limit(8),
+    ]).then(([{ data: checkins }, { data: food }, { data: sums }]) => {
+      const p = analyzePatterns(checkins || [], food || [], facts.lastperiod, facts.cyclelength);
+      setPatternData({ patterns: p, checkins: checkins || [], food: food || [] });
+      setSummaries(sums || []);
+      setLoading(false);
+    });
+  }, [tab, user]);
+
+  const tabs = [
+    { id: "kalender",    label: "Kalender"    },
+    { id: "patronen",    label: "Patronen"    },
+    { id: "samenvatting",label: "Samenvatting"},
+  ];
+
+  // Hulpcomponent: mini bar
+  function MiniBar({ value, max, color }) {
+    const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
+    return (
+      <div style={{ flex: 1, height: 6, background: COLORS.boneWarm, borderRadius: 4, overflow: "hidden" }}>
+        <div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 4, transition: "width 0.4s" }} />
+      </div>
+    );
+  }
+
+  // Bouw energie-per-fase grafiek uit ruwe check-ins
+  function buildPhaseData(checkins) {
+    const phases = {
+      Menstruatie: { total: 0, count: 0, color: "#5C2A3E" },
+      Folliculair:  { total: 0, count: 0, color: "#9B7A3F" },
+      Ovulatoir:    { total: 0, count: 0, color: "#B8633F" },
+      Luteaal:      { total: 0, count: 0, color: "#3A1727" },
+    };
+    checkins.filter(c => c.energy).forEach(c => {
+      const { phase } = getCycleInfoForDate(facts.lastperiod, facts.cyclelength, new Date(c.created_at));
+      if (phases[phase.name]) {
+        phases[phase.name].total += c.energy;
+        phases[phase.name].count += 1;
+      }
+    });
+    return Object.entries(phases).map(([name, d]) => ({
+      name,
+      avg: d.count > 0 ? (d.total / d.count) : null,
+      count: d.count,
+      color: d.color,
+    }));
+  }
+
+  // Bouw slaap-per-week grafiek
+  function buildSleepData(checkins) {
+    const SLEEP_H = { "<5 uur": 4.5, "5–6 uur": 5.5, "6–7 uur": 6.5, "7–8 uur": 7.5, "8+ uur": 8.5 };
+    const weekMap = {};
+    checkins.filter(c => c.slept && SLEEP_H[c.slept]).forEach(c => {
+      const d = new Date(c.created_at);
+      const mon = new Date(d); mon.setDate(d.getDate() - ((d.getDay() + 6) % 7)); mon.setHours(0,0,0,0);
+      const key = mon.toISOString().slice(0, 10);
+      if (!weekMap[key]) weekMap[key] = { total: 0, count: 0 };
+      weekMap[key].total += SLEEP_H[c.slept];
+      weekMap[key].count += 1;
+    });
+    return Object.entries(weekMap).sort((a, b) => a[0].localeCompare(b[0])).slice(-8).map(([key, d]) => ({
+      week: new Date(key).toLocaleDateString("nl-NL", { day: "numeric", month: "short" }),
+      avg: d.count > 0 ? (d.total / d.count).toFixed(1) : null,
+    }));
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* Tab-balk */}
+      <div style={{ display: "flex", gap: 0, background: COLORS.boneWarm, borderRadius: 14, padding: 4 }}>
+        {tabs.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{
+            flex: 1, padding: "9px 4px", borderRadius: 10,
+            background: tab === t.id ? COLORS.fig : "transparent",
+            border: "none", cursor: "pointer",
+            fontFamily: "'DM Sans', sans-serif",
+            fontSize: 13, fontWeight: tab === t.id ? 500 : 400,
+            color: tab === t.id ? COLORS.bone : COLORS.gray,
+            transition: "all 0.15s",
+          }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Kalender tab ── */}
+      {tab === "kalender" && <HistoryScreen user={user} profile={profile} />}
+
+      {/* ── Patronen tab ── */}
+      {tab === "patronen" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {loading && (
+            <div style={{ display: "flex", justifyContent: "center", padding: 32 }}>
+              <LolaSymbol size={32} color={COLORS.figBorder} />
+            </div>
+          )}
+
+          {!loading && (!patternData?.patterns || patternData.checkins.length < 3) && (
+            <div style={{ background: COLORS.boneWarm, borderRadius: 16, padding: "28px 20px", textAlign: "center" }}>
+              <LolaSymbol size={36} color={COLORS.figBorder} />
+              <p style={{ fontFamily: "'Cormorant Garamond', serif", fontStyle: "italic", fontSize: 17, color: COLORS.gray, marginTop: 14, lineHeight: 1.6 }}>
+                Patronen worden zichtbaar na minimaal 3 check-ins. Blijf loggen — Lola leest mee.
+              </p>
+            </div>
+          )}
+
+          {!loading && patternData?.patterns && (() => {
+            const p = patternData.patterns;
+            const phaseData = buildPhaseData(patternData.checkins);
+            const sleepData = buildSleepData(patternData.checkins);
+            const hasPhase  = phaseData.some(d => d.avg !== null);
+
+            return (
+              <>
+                {/* Energie per fase */}
+                {hasPhase && (
+                  <div style={{ background: COLORS.white, borderRadius: 16, padding: "18px", border: `0.5px solid ${COLORS.figBorder}` }}>
+                    <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 10, fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: COLORS.gray, marginBottom: 14 }}>
+                      Energie per cyclusfase
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                      {phaseData.filter(d => d.avg !== null).map(d => (
+                        <div key={d.name}>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                            <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 13, color: COLORS.ink }}>{d.name}</span>
+                            <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 12, color: COLORS.gray }}>
+                              {d.avg.toFixed(1)}/5 <span style={{ fontSize: 10 }}>({d.count}×)</span>
+                            </span>
+                          </div>
+                          <MiniBar value={d.avg} max={5} color={d.color} />
+                        </div>
+                      ))}
+                    </div>
+                    {p.phaseEnergy && (
+                      <p style={{ fontFamily: "'Cormorant Garamond', serif", fontStyle: "italic", fontSize: 14, color: COLORS.gray, marginTop: 12, lineHeight: 1.5 }}>
+                        {phaseData.filter(d => d.avg !== null).length > 1 && (() => {
+                          const sorted = [...phaseData.filter(d => d.avg !== null)].sort((a, b) => b.avg - a.avg);
+                          const best = sorted[0], worst = sorted[sorted.length - 1];
+                          if (best.avg - worst.avg < 0.3) return "Jouw energie is vrij stabiel door je cyclus heen.";
+                          return `Je voelt je het sterkst in je ${best.name.toLowerCase()} fase, en zachter in de ${worst.name.toLowerCase()}.`;
+                        })()}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Slaap per week */}
+                {sleepData.length >= 2 && (
+                  <div style={{ background: COLORS.white, borderRadius: 16, padding: "18px", border: `0.5px solid ${COLORS.figBorder}` }}>
+                    <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 10, fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: COLORS.gray, marginBottom: 14 }}>
+                      Gemiddelde slaap per week
+                    </div>
+                    <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 80 }}>
+                      {sleepData.map((w, i) => {
+                        const h = w.avg ? ((parseFloat(w.avg) - 4) / 5) * 100 : 0;
+                        return (
+                          <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                            <div style={{ fontSize: 10, color: COLORS.gray, fontFamily: "'DM Sans', sans-serif" }}>{w.avg}u</div>
+                            <div style={{ width: "100%", height: `${Math.max(8, h)}%`, background: parseFloat(w.avg) >= 7 ? COLORS.fig : parseFloat(w.avg) >= 6 ? COLORS.terra : COLORS.figBorder, borderRadius: "4px 4px 0 0", minHeight: 8 }} />
+                            <div style={{ fontSize: 9, color: COLORS.gray, fontFamily: "'DM Sans', sans-serif", textAlign: "center", lineHeight: 1.2 }}>{w.week}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Correlaties */}
+                {(p.fatCorr || p.proteinCorr || p.kcalCorr) && (
+                  <div style={{ background: COLORS.white, borderRadius: 16, padding: "18px", border: `0.5px solid ${COLORS.figBorder}` }}>
+                    <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 10, fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: COLORS.gray, marginBottom: 14 }}>
+                      Voeding & energie
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      {[p.fatCorr, p.proteinCorr, p.kcalCorr].filter(Boolean).map((corr, i) => (
+                        <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                          <div style={{ width: 6, height: 6, borderRadius: "50%", background: COLORS.terra, flexShrink: 0, marginTop: 6 }} />
+                          <p style={{ fontFamily: "'Cormorant Garamond', serif", fontStyle: "italic", fontSize: 15, color: COLORS.ink, lineHeight: 1.5, margin: 0 }}>
+                            {corr}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Recente energie samenvatting */}
+                <div style={{ background: COLORS.fig, borderRadius: 16, padding: "18px 20px" }}>
+                  <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 10, fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: COLORS.goldSoft, marginBottom: 10 }}>
+                    Afgelopen 7 dagen
+                  </div>
+                  <div style={{ display: "flex", gap: 16 }}>
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontFamily: "'Italiana', serif", fontSize: 36, color: COLORS.bone, lineHeight: 1 }}>{p.recentAvgEnergy}</div>
+                      <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 10, color: COLORS.goldSoft, marginTop: 4 }}>gem. energie /5</div>
+                    </div>
+                    <div style={{ width: "0.5px", background: "rgba(244,236,221,0.2)" }} />
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontFamily: "'Italiana', serif", fontSize: 36, color: COLORS.bone, lineHeight: 1 }}>{p.recentLowDays}</div>
+                      <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 10, color: COLORS.goldSoft, marginTop: 4 }}>dagen lage energie</div>
+                    </div>
+                    <div style={{ width: "0.5px", background: "rgba(244,236,221,0.2)" }} />
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontFamily: "'Italiana', serif", fontSize: 36, color: COLORS.bone, lineHeight: 1 }}>{p.total}</div>
+                      <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 10, color: COLORS.goldSoft, marginTop: 4 }}>check-ins totaal</div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* ── Samenvatting tab ── */}
+      {tab === "samenvatting" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {loading && (
+            <div style={{ display: "flex", justifyContent: "center", padding: 32 }}>
+              <LolaSymbol size={32} color={COLORS.figBorder} />
+            </div>
+          )}
+
+          {!loading && summaries.length === 0 && (
+            <div style={{ background: COLORS.boneWarm, borderRadius: 16, padding: "28px 20px", textAlign: "center" }}>
+              <LolaSymbol size={36} color={COLORS.figBorder} />
+              <p style={{ fontFamily: "'Cormorant Garamond', serif", fontStyle: "italic", fontSize: 17, color: COLORS.gray, marginTop: 14, lineHeight: 1.6 }}>
+                Lola schrijft elke week een persoonlijke observatie.<br/>De eerste verschijnt na je eerste volledige week.
+              </p>
+            </div>
+          )}
+
+          {!loading && summaries.map(s => {
+            const weekDate = new Date(s.week_start);
+            const label = weekDate.toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric" });
+            return (
+              <div key={s.id} style={{ background: COLORS.white, borderRadius: 16, border: `0.5px solid ${COLORS.figBorder}`, overflow: "hidden" }}>
+                <div style={{ background: COLORS.boneWarm, padding: "10px 18px", borderBottom: `0.5px solid ${COLORS.figBorder}` }}>
+                  <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 10, fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: COLORS.gray }}>
+                    Week van {label}
+                  </div>
+                </div>
+                <div style={{ padding: "18px 20px" }}>
+                  <p style={{ fontFamily: "'Cormorant Garamond', serif", fontStyle: "italic", fontSize: 17, color: COLORS.ink, lineHeight: 1.65, margin: 0 }}>
+                    {s.summary}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── IK SCREEN (profiel + geheugen + doelen) ───────────────
 function IkScreen({ profile, user, onProfileUpdated, onRestartIntake }) {
   const [tab, setTab] = useState("profiel");
@@ -3349,7 +3624,7 @@ onSkip={async () => {
     loggen: <LoggenScreen />,
     checkin: <CheckInScreen key={checkinType} user={user} checkinType={checkinType} onDone={() => { setScreen("loggen"); setRefreshKey(k => k + 1); }} />,
     food: <FoodScreen user={user} />,
-    history: <HistoryScreen user={user} profile={profile} />,
+    history: <InzichtenScreen user={user} profile={profile} />,
     goals: <MonthlyGoalsScreen user={user} profile={profile} />,
     profile: <IkScreen profile={profile} user={user} onProfileUpdated={(updated) => setProfile(p => ({ ...p, facts: updated }))} onRestartIntake={() => setPhase("chat")} />,
   };
