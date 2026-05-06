@@ -2929,7 +2929,16 @@ export default function App() {
           <div style={{ marginBottom: 40 }}>
             <LolaLogo size="md" />
           </div>
-          <AuthScreen onAuth={(u) => { setUser(u); setPhase("facts"); }} />
+          <AuthScreen onAuth={async (u) => {
+            setUser(u);
+            const { data, error } = await supabase.from("profiles").select("*").eq("id", u.id).maybeSingle();
+            if (data?.id) {
+              setProfile({ facts: data });
+              setPhase("app");
+            } else {
+              setPhase("facts");
+            }
+          }} />
         </div>
       </div>
     );
