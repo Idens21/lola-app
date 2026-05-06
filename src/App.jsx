@@ -447,125 +447,76 @@ function NavBar({ active, onChange }) {
   );
 }
 
-// ── INTAKE FASE 1: FEITEN FORMULIER ───────────────────────
-function IntakeFacts({ onDone, onSkip }) {
-  const [form, setForm] = useState({ name: "", birthdate: "", birthtime: "", birthplace: "", lastperiod: "", cyclelength: "28–32 dagen", hdtype: "" });
-  const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+// ── ONBOARDING CHAT (Lola-led, geen formulier) ────────────
+const ONBOARDING_SYSTEM = `Je bent Lola — je ontmoet iemand voor het allereerst.
 
-  const inputStyle = {
-    width: "100%", padding: "12px 16px", borderRadius: 16,
-    border: `1.5px solid ${COLORS.roseBorder}`, background: COLORS.white,
-    color: COLORS.text, fontSize: 14, fontFamily: "inherit",
-    outline: "none", boxSizing: "border-box", marginTop: 6,
-  };
+Je hebt twee doelen in dit gesprek:
+1. Haar leren kennen als mens
+2. De basisgegevens verzamelen die de app nodig heeft
 
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-      <div style={{ marginBottom: 32 }}>
-        <div style={{ marginBottom: 16 }}><LolaSymbol size={28} color={COLORS.fig} /></div>
-        <h2 style={{ fontSize: 28, fontWeight: 500, color: COLORS.text, marginBottom: 8, letterSpacing: "-0.02em" }}>Hoi, ik ben Lola.</h2>
-        <p style={{ fontSize: 14, color: COLORS.muted, lineHeight: 1.7 }}>Voordat we echt kennismaken, heb ik een paar feiten nodig. Daarna gaan we het gesprek aan.</p>
-      </div>
+Aanpak:
+- Begin altijd met een warme begroeting en vraag direct naar haar naam
+- Vraag dan één voor één: cyclus (laatste menstruatie, gemiddelde lengte), geboortedatum, geboortetijd en -plaats
+- Daarna ga je de diepte in: werk, relaties, patronen, wat haar bezighoudt
+- Stel ALTIJD maar één vraag per bericht
+- Reageer kort en warm op wat ze zegt voordat je de volgende vraag stelt
+- Na 12–15 uitwisselingen sluit je af met een persoonlijke reflectie
 
-      {[
-        { key: "name", label: "Hoe mag ik je noemen?", type: "text", placeholder: "Jouw naam" },
-        { key: "birthdate", label: "Geboortedatum", type: "date" },
-        { key: "birthtime", label: "Geboortetijd (zo exact mogelijk)", type: "time" },
-        { key: "birthplace", label: "Geboorteplaats", type: "text", placeholder: "Stad, land" },
-      ].map(({ key, label, type, placeholder }) => (
-        <div key={key} style={{ marginBottom: 18 }}>
-          <label style={{ fontSize: 13, fontWeight: 500, color: COLORS.text }}>{label}</label>
-          <input type={type} placeholder={placeholder} value={form[key]} onChange={(e) => set(key, e.target.value)} style={inputStyle} />
-        </div>
-      ))}
+Zodra je iets weet, voeg je een verborgen tag toe aan je bericht (deze worden automatisch opgeslagen en zijn NIET zichtbaar in de chat):
+[PROFIEL: name=Iris]
+[PROFIEL: birthdate=1990-05-15]
+[PROFIEL: birthtime=14:30]
+[PROFIEL: birthplace=Amsterdam, Nederland]
+[PROFIEL: lastperiod=2024-04-01]
+[PROFIEL: cyclelength=28–32 dagen]   ← kies exact uit: "Korter dan 25 dagen" / "25–28 dagen" / "28–32 dagen" / "Langer dan 32 dagen" / "Onregelmatig"
+[PROFIEL: work=ontwerper]
+[PROFIEL: relationship_status=Relatie]
+[PROFIEL: children=Geen kinderen]
+[PROFIEL: living_situation=Met partner]
 
-      <div style={{ marginBottom: 18 }}>
-        <label style={{ fontSize: 13, fontWeight: 500, color: COLORS.text }}>Human design type <span style={{ color: COLORS.muted, fontWeight: 400 }}>(als je het weet)</span></label>
-        <select value={form.hdtype} onChange={(e) => set("hdtype", e.target.value)} style={{ ...inputStyle, appearance: "none", cursor: "pointer" }}>
-          <option value="">Ik weet het niet — Lola berekent het</option>
-          <option>Manifestor</option>
-          <option>Generator</option>
-          <option>Manifesting Generator</option>
-          <option>Projector</option>
-          <option>Reflector</option>
-        </select>
-      </div>
+Meerdere tags per bericht zijn toegestaan als je meerdere feiten leert.
+Schrijf in het Nederlands. Max 3 zinnen + één vraag per bericht.`;
 
-      <div style={{ marginBottom: 18 }}>
-        <label style={{ fontSize: 13, fontWeight: 500, color: COLORS.text }}>Eerste dag laatste menstruatie</label>
-        <input type="date" value={form.lastperiod} onChange={(e) => set("lastperiod", e.target.value)} style={inputStyle} />
-      </div>
-
-      <div style={{ marginBottom: 32 }}>
-        <label style={{ fontSize: 13, fontWeight: 500, color: COLORS.text }}>Gemiddelde cycluslengte</label>
-        <select value={form.cyclelength} onChange={(e) => set("cyclelength", e.target.value)} style={{ ...inputStyle, appearance: "none", cursor: "pointer" }}>
-          {["Korter dan 25 dagen", "25–28 dagen", "28–32 dagen", "Langer dan 32 dagen", "Onregelmatig"].map((o) => <option key={o}>{o}</option>)}
-        </select>
-      </div>
-<button onClick={onSkip} style={{ padding: "12px", borderRadius: 24, background: "transparent", border: `1px solid ${COLORS.roseBorder}`, color: COLORS.muted, fontSize: 13, cursor: "pointer", fontFamily: "inherit", marginBottom: 8, width: "100%" }}>
-  → Sla intake over (testen)
-</button>
-<button onClick={() => form.name && onDone(form)} style={{ padding: "15px", borderRadius: 24, background: form.name ? COLORS.rose : COLORS.roseBorder, border: "none", color: COLORS.white, fontSize: 15, fontWeight: 500, cursor: form.name ? "pointer" : "default", fontFamily: "inherit" }}>
-  Verder met het gesprek →
-</button>
-    </div>
-  );
-}
-
-// ── INTAKE FASE 2: AI GESPREK ─────────────────────────────
-const INTAKE_SYSTEM = (facts) => `Je bent Lola, een warme maar eerlijke persoonlijke levenscoach voor vrouwen. Je voert nu een intake-gesprek om een diep persoonlijkheidsportret op te bouwen.
-
-Wat je al weet over deze persoon:
-- Naam: ${facts.name}
-- Geboortedatum: ${facts.birthdate}
-- Geboorteplaats: ${facts.birthplace}
-- Human design type: ${facts.hdtype || "onbekend, later te berekenen"}
-- Cycluslengte: ${facts.cyclelength}
-
-Jouw aanpak:
-- Stel ALTIJD maar één vraag tegelijk
-- Reageer kort op wat ze zegt voordat je de volgende vraag stelt
-- Ga de diepte in — bij oppervlakkige antwoorden vraag je door
-- Wees warm maar durf te spiegelen
-- Behandel deze onderwerpen in een natuurlijke volgorde (niet rigide):
-  1. Werk & levenssituatie — wat doe je, hoe voelt dat?
-  2. Relaties — vriendschap, liefde, familie — waar loop je tegenaan?
-  3. Hechtingsstijl — hoe reageer je als iemand dichterbij komt of zich terugtrekt?
-  4. Patronen & triggers — wat herken je in jezelf dat je wilt veranderen?
-  5. Kernovertuigingen — wat vertel je jezelf over wie je bent en wat je verdient?
-  6. Waar kom je vandaan — niet trauma benoemen maar indirect vragen naar wat je hebt meegekregen
-- Na 10–15 uitwisselingen sluit je af met een korte, persoonlijke reflectie
-
-Toon: warm, direct, geen psychologisch jargon, alsof je praat met een slimme vriendin die ook coach is. Schrijf in het Nederlands. Houd je berichten kort — max 3 zinnen + één vraag.`;
-
-function IntakeChat({ facts, onDone }) {
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
+function OnboardingChat({ userId, onDone, onSkip }) {
+  const [messages,      setMessages]      = useState([]);
+  const [input,         setInput]         = useState("");
+  const [loading,       setLoading]       = useState(false);
   const [exchangeCount, setExchangeCount] = useState(0);
+  const [collectedFacts,setCollectedFacts]= useState({});
+  const [finishing,     setFinishing]     = useState(false);
   const bottomRef = useRef(null);
 
-  useEffect(() => {
-    startConversation();
-  }, []);
+  useEffect(() => { startConversation(); }, []);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  // Parst [PROFIEL: key=value] tags, retourneert schone tekst + gevonden feiten
+  function parseProfileTags(text) {
+    const tagRegex = /\[PROFIEL:\s*([^\]]+)\]/g;
+    const facts = {};
+    const matches = [...text.matchAll(tagRegex)];
+    for (const match of matches) {
+      const [k, ...rest] = match[1].split("=");
+      const v = rest.join("=").trim();
+      if (k && v) facts[k.trim()] = v;
+    }
+    const clean = text.replace(tagRegex, "").replace(/\s{2,}/g, " ").trim();
+    return { clean, facts };
+  }
 
   async function startConversation() {
     setLoading(true);
     const opening = await askLola(
-      [{ role: "user", content: `Start het gesprek. Begroet me bij naam (${facts.name}) en stel je eerste vraag over mijn werk of leven.` }],
-      INTAKE_SYSTEM(facts)
+      [{ role: "user", content: "Start het gesprek. Begroet me warm en stel je allereerste vraag." }],
+      ONBOARDING_SYSTEM
     );
-    setMessages([{ from: "lola", text: opening }]);
+    const { clean } = parseProfileTags(opening);
+    setMessages([{ from: "lola", text: clean }]);
     setLoading(false);
   }
 
   async function send() {
-    if (!input.trim() || loading) return;
-    const userMsg = input;
+    if (!input.trim() || loading || finishing) return;
+    const userMsg = input.trim();
     setInput("");
     const newMessages = [...messages, { from: "user", text: userMsg }];
     setMessages(newMessages);
@@ -573,97 +524,127 @@ function IntakeChat({ facts, onDone }) {
     const count = exchangeCount + 1;
     setExchangeCount(count);
 
-    const apiMessages = newMessages.map((m) => ({ role: m.from === "user" ? "user" : "assistant", content: m.text }));
+    const apiMessages = newMessages.map(m => ({ role: m.from === "user" ? "user" : "assistant", content: m.text }));
 
-    let prompt = INTAKE_SYSTEM(facts);
+    let system = ONBOARDING_SYSTEM;
     if (count >= 12) {
-      prompt += "\n\nJe hebt nu genoeg gehoord. Sluit het gesprek af met een persoonlijke, warme reflectie van 3–4 zinnen over wat je hebt gehoord. Eindig met: 'Ik ken je nu een stukje beter. Laten we samen aan de slag gaan.'";
+      system += "\n\nJe hebt nu genoeg gehoord. Sluit het gesprek af met een persoonlijke reflectie van 3–4 zinnen. Eindig met: 'Ik ken je nu een stukje beter. Laten we samen aan de slag gaan.'";
     }
 
-    const reply = await askLola(apiMessages, prompt);
-    setMessages((prev) => [...prev, { from: "lola", text: reply }]);
+    const rawReply = await askLola(apiMessages, system);
+    const { clean, facts: newFacts } = parseProfileTags(rawReply);
+
+    // Accumuleer verzamelde feiten
+    const allFacts = { ...collectedFacts, ...newFacts };
+    setCollectedFacts(allFacts);
+
+    // Sla nieuwe feiten direct op in profiles
+    if (Object.keys(newFacts).length > 0 && userId) {
+      await supabase.from("profiles").upsert({ id: userId, ...newFacts }, { onConflict: "id" });
+    }
+
+    setMessages(prev => [...prev, { from: "lola", text: clean }]);
     setLoading(false);
 
-    if (count >= 13) {
+    // Na afsluitingsbericht: genereer portret en ga verder
+    if (count >= 13 && !finishing) {
+      setFinishing(true);
       setTimeout(async () => {
-        // Genereer persoonlijkheidsportret op basis van het gesprek + alle profieldata
-        const zodiac = getZodiac(facts.birthdate);
-        const age = facts.birthdate ? Math.floor((Date.now() - new Date(facts.birthdate)) / (365.25 * 86400000)) : null;
-        const portraitPrompt = `Op basis van dit intakegesprek, schrijf een persoonlijk portret van ${facts.name} in de derde persoon. Schrijf warm, inzichtelijk en concreet — alsof je het aan een collega-coach vertelt die haar gaat begeleiden.
+        const allApiMessages = [...newMessages, { role: "assistant", content: clean }].map(m => ({ role: m.from === "user" ? "user" : "assistant", content: m.text }));
+        const portraitPrompt = `Op basis van dit kennismakingsgesprek, schrijf een persoonlijk portret in de derde persoon. Warm, inzichtelijk, concreet — alsof je het deelt met een collega-coach.
 
-Verwerk hierin:
-- Wie ze is: persoonlijkheid, energie, kernkwaliteiten
-- Haar leefsituatie: werk, relaties, thuis
-- Kernpatronen: wat herhaalt zich, wat houdt haar tegen
-- Wat ze zoekt en nodig heeft
-- Haar Human Design type (${facts.hdtype || "onbekend"}) en wat dat betekent voor hoe zij werkt en beslist
-- Haar sterrenbeeld (${zodiac || "onbekend"}) als extra kleur
-${age ? `- Ze is ${age} jaar` : ""}
-${facts.birthplace ? `- Opgegroeid in/rond ${facts.birthplace}` : ""}
+Verwerk: wie ze is, haar leefsituatie, kernpatronen, wat ze zoekt.
+${allFacts.birthdate ? `Leeftijd: ca. ${Math.floor((Date.now() - new Date(allFacts.birthdate)) / (365.25*86400000))} jaar.` : ""}
+${allFacts.birthplace ? `Opgegroeid in/rond ${allFacts.birthplace}.` : ""}
+${allFacts.name ? `Naam: ${allFacts.name}.` : ""}
 
-Schrijf in het Nederlands. Max 450 woorden. Geen kopjes, gewoon doorlopende tekst. Eindig niet met een vraag.`;
+Max 400 woorden. Geen kopjes, doorlopende tekst. Niet eindigen met een vraag.`;
 
-        const allMessages = newMessages.map(m => ({ role: m.from === "user" ? "user" : "assistant", content: m.text }));
-        const portrait = await askLola(allMessages, portraitPrompt);
-        onDone({ facts, conversation: newMessages, personality_profile: portrait });
-      }, 3000);
+        const portrait = await askLola(allApiMessages, portraitPrompt);
+
+        // Sla portret op
+        if (userId) {
+          await supabase.from("profiles").update({ personality_profile: portrait }).eq("id", userId);
+        }
+
+        onDone({ facts: allFacts, personality_profile: portrait });
+      }, 2500);
     }
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 80px)" }}>
-      <div style={{ padding: "16px 0 12px", borderBottom: `0.5px solid ${COLORS.roseBorder}`, marginBottom: 16 }}>
-        <div style={{ fontSize: 11, color: COLORS.muted, letterSpacing: "0.06em", textTransform: "uppercase" }}>Lola intake gesprek</div>
-        <div style={{ fontSize: 13, color: COLORS.text, marginTop: 2 }}>Vertel eerlijk — alles blijft tussen jou en Lola</div>
+    <div style={{ display: "flex", flexDirection: "column", height: "100dvh", background: COLORS.bone }}>
+
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px 12px", borderBottom: `0.5px solid ${COLORS.figBorder}` }}>
+        <LolaLogo size="md" />
+        <button onClick={onSkip} style={{ background: "none", border: "none", fontSize: 12, color: COLORS.gray, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+          Overslaan →
+        </button>
       </div>
 
-      <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 14, paddingBottom: 16 }}>
-        {messages.map((msg, i) => (
-          <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: msg.from === "user" ? "flex-end" : "flex-start" }}>
-            {msg.from === "lola" && <div style={{ fontSize: 10, color: COLORS.muted, marginBottom: 3, fontWeight: 500 }}>Lola</div>}
-            <div style={{
-              maxWidth: "85%", padding: "12px 16px", borderRadius: 20, fontSize: 14, lineHeight: 1.7,
-              background: msg.from === "lola" ? COLORS.roseLight : COLORS.rose,
-              color: msg.from === "lola" ? COLORS.text : COLORS.white,
-              borderBottomLeftRadius: msg.from === "lola" ? 4 : 20,
-              borderBottomRightRadius: msg.from === "user" ? 4 : 20,
-              border: msg.from === "lola" ? `0.5px solid ${COLORS.roseBorder}` : "none",
-            }}>
-              {msg.text}
-            </div>
-          </div>
-        ))}
-        {loading && (
-          <div style={{ alignSelf: "flex-start" }}>
-            <div style={{ fontSize: 10, color: COLORS.muted, marginBottom: 3, fontWeight: 500 }}>Lola</div>
-            <div style={{ background: COLORS.roseLight, border: `0.5px solid ${COLORS.roseBorder}`, borderRadius: 20, borderBottomLeftRadius: 4, padding: "12px 16px" }}>
-              <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                {[0, 1, 2].map((i) => (
-                  <div key={i} style={{ width: 6, height: 6, borderRadius: "50%", background: COLORS.rose, animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite` }} />
-                ))}
+      {/* Berichten */}
+      <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12, padding: "20px 20px 16px" }}>
+        {messages.map((msg, i) => {
+          const isLola = msg.from === "lola";
+          return (
+            <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: isLola ? "flex-start" : "flex-end" }}>
+              <div style={{
+                maxWidth: "82%", wordBreak: "break-word",
+                padding: isLola ? "14px 18px" : "11px 16px",
+                borderRadius: 20,
+                borderBottomLeftRadius: isLola ? 4 : 20,
+                borderBottomRightRadius: isLola ? 20 : 4,
+                background: isLola ? COLORS.fig : COLORS.boneWarm,
+                color: isLola ? COLORS.bone : COLORS.ink,
+                border: isLola ? "none" : `0.5px solid ${COLORS.figBorder}`,
+                fontFamily: isLola ? "'Cormorant Garamond', serif" : "'DM Sans', sans-serif",
+                fontStyle: isLola ? "italic" : "normal",
+                fontSize: isLola ? 17 : 14,
+                lineHeight: isLola ? 1.6 : 1.5,
+              }}>
+                {msg.text}
               </div>
+            </div>
+          );
+        })}
+
+        {(loading || finishing) && (
+          <div style={{ alignSelf: "flex-start" }}>
+            <div style={{ background: COLORS.fig, borderRadius: 20, borderBottomLeftRadius: 4, padding: "14px 18px", display: "flex", gap: 5 }}>
+              {[0,1,2].map(i => <div key={i} style={{ width: 6, height: 6, borderRadius: "50%", background: COLORS.bone, animation: `pulse 1.2s ease-in-out ${i*0.2}s infinite` }} />)}
             </div>
           </div>
         )}
         <div ref={bottomRef} />
       </div>
 
-      <div style={{ display: "flex", gap: 10, paddingTop: 12, borderTop: `0.5px solid ${COLORS.roseBorder}` }}>
+      {/* Voortgang indicator */}
+      {exchangeCount > 0 && (
+        <div style={{ padding: "4px 24px 0" }}>
+          <div style={{ height: 2, background: COLORS.boneWarm, borderRadius: 2, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${Math.min(100, (exchangeCount / 13) * 100)}%`, background: COLORS.fig, borderRadius: 2, transition: "width 0.5s" }} />
+          </div>
+        </div>
+      )}
+
+      {/* Input */}
+      <div style={{ display: "flex", gap: 8, padding: "12px 20px 32px", borderTop: `0.5px solid ${COLORS.figBorder}` }}>
         <input
           value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && !e.shiftKey && send()}
           placeholder="Typ je antwoord..."
-          style={{ flex: 1, minWidth: 0, padding: "12px 16px", borderRadius: 24, border: `1px solid ${COLORS.roseBorder}`, background: COLORS.white, color: COLORS.text, fontSize: 14, fontFamily: "inherit", outline: "none" }}
+          disabled={finishing}
+          style={{ flex: 1, minWidth: 0, padding: "12px 16px", borderRadius: 24, border: `1px solid ${COLORS.figBorder}`, background: COLORS.white, color: COLORS.ink, fontSize: 14, fontFamily: "'DM Sans', sans-serif", outline: "none" }}
         />
-        <MicButton onResult={(text) => setInput(prev => prev ? prev + " " + text : text)} />
-        <button onClick={send} disabled={loading} style={{ width: 46, height: 46, borderRadius: "50%", background: loading ? COLORS.roseBorder : COLORS.rose, border: "none", cursor: loading ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        <MicButton onResult={text => setInput(prev => prev ? prev + " " + text : text)} />
+        <button onClick={send} disabled={loading || finishing} style={{ width: 46, height: 46, borderRadius: "50%", background: (loading || finishing) ? COLORS.figBorder : COLORS.fig, border: "none", cursor: (loading || finishing) ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M3 8h10M8 3l5 5-5 5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M3 8h10M8 3l5 5-5 5" stroke={COLORS.bone} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </button>
       </div>
-
     </div>
   );
 }
@@ -3504,64 +3485,28 @@ export default function App() {
       </div>
     );
   }
-  if (phase === "facts") {
+  if (phase === "facts" || phase === "chat") {
     return (
-      <div style={{ minHeight: "100vh", background: COLORS.bone, fontFamily: "'DM Sans','Helvetica Neue',sans-serif" }}>
-        <style>{`* { box-sizing: border-box; margin: 0; padding: 0; } body { background: ${COLORS.bone}; overflow-x: hidden; } input, button, textarea, select { max-width: 100%; font-family: inherit; } ::-webkit-scrollbar { display: none; }`}</style>
-        <div style={{ maxWidth: 480, margin: "0 auto", width: "100%", padding: "40px 20px 60px" }}>
-          <div style={{ marginBottom: 40 }}>
-            <LolaLogo size="md" />
-          </div>
-<IntakeFacts onDone={async (facts) => {
-  const { error } = await supabase.from("profiles").upsert({
-    id: user.id,
-    name: facts.name,
-    birthdate: facts.birthdate,
-    birthtime: facts.birthtime,
-    birthplace: facts.birthplace,
-    hdtype: facts.hdtype,
-    cyclelength: facts.cyclelength,
-    lastperiod: facts.lastperiod,
-  });
-  if (error) console.error(error);
-  setProfile({ facts });
-  setPhase("chat");
-}}
-onSkip={async () => {
-  const facts = { name: "Iris", hdtype: "Projector", cyclelength: "28–32 dagen", lastperiod: "2025-04-07" };
-  await supabase.from("profiles").upsert({ id: user.id, ...facts });
-  setProfile({ facts });
-  setPhase("app");
-}}
-/>
+      <>
+        <style>{`* { box-sizing: border-box; margin: 0; padding: 0; } body { background: ${COLORS.bone}; overflow-x: hidden; } input, button, textarea, select { max-width: 100%; font-family: inherit; } ::-webkit-scrollbar { display: none; } @keyframes pulse { 0%,100%{opacity:.3;transform:scale(.8)} 50%{opacity:1;transform:scale(1.1)} }`}</style>
+        <div style={{ maxWidth: 480, margin: "0 auto", width: "100%", fontFamily: "'DM Sans','Helvetica Neue',sans-serif" }}>
+          <OnboardingChat
+            userId={user?.id}
+            onDone={async (fullProfile) => {
+              // Laad volledig profiel opnieuw van DB (Lola heeft alles al opgeslagen via tags)
+              const { data } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
+              setProfile({ facts: data || fullProfile.facts });
+              setPhase("welcome");
+            }}
+            onSkip={async () => {
+              // Sla over zonder intake — ga direct naar app
+              const { data } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
+              setProfile({ facts: data || {} });
+              setPhase("app");
+            }}
+          />
         </div>
-      </div>
-    );
-  }
-
-  if (phase === "chat") {
-    return (
-      <div style={{ minHeight: "100vh", background: COLORS.bone, fontFamily: "'DM Sans','Helvetica Neue',sans-serif" }}>
-        <style>{`* { box-sizing: border-box; margin: 0; padding: 0; } body { background: ${COLORS.bone}; overflow-x: hidden; } input, button, textarea, select { max-width: 100%; font-family: inherit; } ::-webkit-scrollbar { display: none; }`}</style>
-        <style>{`
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { overflow-x: hidden; }
-  input, button, textarea, select { max-width: 100%; font-family: inherit; }
-  ::-webkit-scrollbar { display: none; }
-`}</style>
-        <div style={{ maxWidth: 480, margin: "0 auto", width: "100%", padding: "40px 20px 60px" }}>
-          <div style={{ marginBottom: 24 }}>
-            <LolaLogo size="md" />
-          </div>
-          <IntakeChat facts={profile.facts} onDone={async (fullProfile) => {
-            if (fullProfile.personality_profile && user) {
-              await supabase.from("profiles").update({ personality_profile: fullProfile.personality_profile }).eq("id", user.id);
-            }
-            setProfile(fullProfile);
-            setPhase("welcome");
-          }} />
-        </div>
-      </div>
+      </>
     );
   }
 
