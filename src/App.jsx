@@ -694,24 +694,24 @@ function WelcomeScreen({ profile, onStart }) {
 
 // ── HOME SCREEN ───────────────────────────────────────────
 function HomeScreen({ profile, onCheckin, onGoToLola, user, onPeriodLogged }) {
-  const name = profile?.facts?.name || "liefste";
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Goedemorgen" : hour < 18 ? "Goedemiddag" : "Goedenavond";
+  const facts    = profile?.facts || {};
+  const name     = facts.name || "liefste";
+  const hour     = new Date().getHours();
   const todayLabel = new Date().toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long" });
-  const { day: cycleDay, phase } = getCycleInfo(profile?.facts?.lastperiod, profile?.facts?.cyclelength);
+  const { day: cycleDay, phase } = getCycleInfo(facts.lastperiod, facts.cyclelength);
 
-  const [loggingPeriod, setLoggingPeriod] = useState(false);
-  const [periodLogged, setPeriodLogged] = useState(false);
-  const [todayCheckin, setTodayCheckin] = useState(null);
-  const [todayAvond, setTodayAvond] = useState(null);
-  const [todayFood, setTodayFood] = useState([]);
+  const [loggingPeriod,  setLoggingPeriod]  = useState(false);
+  const [periodLogged,   setPeriodLogged]   = useState(false);
+  const [todayCheckin,   setTodayCheckin]   = useState(null);
+  const [todayAvond,     setTodayAvond]     = useState(null);
+  const [todayFood,      setTodayFood]      = useState([]);
   const [recentCheckins, setRecentCheckins] = useState([]);
-  const [loadingData, setLoadingData] = useState(true);
+  const [loadingData,    setLoadingData]    = useState(true);
 
   useEffect(() => {
     if (!user) { setLoadingData(false); return; }
     const start = new Date(); start.setHours(0, 0, 0, 0);
-    const end = new Date(); end.setHours(23, 59, 59, 999);
+    const end   = new Date(); end.setHours(23, 59, 59, 999);
     Promise.all([
       supabase.from("checkins").select("*").eq("user_id", user.id)
         .gte("created_at", start.toISOString()).lte("created_at", end.toISOString())
@@ -741,165 +741,164 @@ function HomeScreen({ profile, onCheckin, onGoToLola, user, onPeriodLogged }) {
     if (onPeriodLogged) onPeriodLogged(todayStr);
   }
 
-  const kcal = todayFood.reduce((s, f) => s + (f.kcal || 0), 0);
+  const kcal    = todayFood.reduce((s, f) => s + (f.kcal    || 0), 0);
   const protein = todayFood.reduce((s, f) => s + (f.protein || 0), 0);
-  const carbs = todayFood.reduce((s, f) => s + (f.carbs || 0), 0);
-  const fat = todayFood.reduce((s, f) => s + (f.fat || 0), 0);
+  const carbs   = todayFood.reduce((s, f) => s + (f.carbs   || 0), 0);
+  const fat     = todayFood.reduce((s, f) => s + (f.fat     || 0), 0);
   const lolaObs = generateLolaObservation(todayCheckin, recentCheckins, cycleDay, phase);
+  const MOODS   = ["😴", "😔", "😐", "🙂", "✨"];
+  const MLABELS = ["Zwaar", "Moeizaam", "Oké", "Fris", "Uitgerust"];
+  const pred    = getCyclePrediction(facts.lastperiod, facts.cyclelength);
+
+  if (loadingData) return (
+    <div style={{ display: "flex", justifyContent: "center", padding: 40 }}>
+      <LolaSymbol size={32} color={COLORS.figBorder} />
+    </div>
+  );
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-        <div>
-          <div style={{ fontSize: 24, fontWeight: 300, color: COLORS.text, lineHeight: 1.2 }}>
-            {greeting},<br /><span style={{ fontWeight: 600 }}>{name}.</span>
-          </div>
-          <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 4 }}>{todayLabel}</div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+      {/* ── Begroeting ───────────────────────── */}
+      <div>
+        <div style={{ fontFamily: "'Cormorant Garamond', serif", fontStyle: "italic", fontSize: 13, color: COLORS.gray, marginBottom: 2 }}>
+          {todayLabel}
         </div>
-        <div style={{ fontSize: 24, color: COLORS.rose }}>✦</div>
+        <div style={{ fontFamily: "'Cormorant Garamond', serif", fontWeight: 300, fontSize: 32, color: COLORS.ink, lineHeight: 1.1 }}>
+          {hour < 12 ? "Goedemorgen," : hour < 18 ? "Goedemiddag," : "Goedenavond,"}<br />
+          <span style={{ fontStyle: "italic", color: COLORS.fig }}>{name}.</span>
+        </div>
       </div>
 
-      <div style={{ background: COLORS.roseLight, borderRadius: 20, padding: "14px 18px", border: `0.5px solid ${COLORS.roseBorder}` }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 10, height: 10, borderRadius: "50%", background: phase.color, flexShrink: 0 }} />
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.roseDark }}>{cycleDay ? `Dag ${cycleDay}` : "Cyclus"}</div>
-            <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 2, lineHeight: 1.5 }}>{phase.tip}</div>
-          </div>
+      {/* ── Lola observeert ─────────────────── */}
+      <div style={{ background: COLORS.fig, borderRadius: 16, padding: "18px 20px" }}>
+        <div style={{ fontSize: 10, color: COLORS.goldSoft, fontWeight: 500, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 8, fontFamily: "'DM Sans', sans-serif" }}>
+          Lola observeert
         </div>
-        {(() => {
-          const pred = getCyclePrediction(profile?.facts?.lastperiod, profile?.facts?.cyclelength);
-          if (!pred) return null;
-          return (
-            <div style={{ marginTop: 10, paddingTop: 10, borderTop: `0.5px solid ${COLORS.roseBorder}` }}>
-              <div style={{ fontSize: 11, color: COLORS.roseDark, fontWeight: 500, marginBottom: 6 }}>
-                Volgende periode verwacht over {pred.daysUntilNext} dag{pred.daysUntilNext !== 1 ? "en" : ""} — {pred.nextPeriod.toLocaleDateString("nl-NL", { day: "numeric", month: "long" })}
-              </div>
-              {pred.transitions.length > 0 && (
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {pred.transitions.map(t => (
-                    <span key={t.name} style={{ fontSize: 10, background: "rgba(255,255,255,0.7)", border: `0.5px solid ${COLORS.roseBorder}`, borderRadius: 20, padding: "3px 10px", color: COLORS.text }}>
-                      {t.name} over {t.daysUntil}d
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })()}
-        {periodLogged ? (
-          <div style={{ marginTop: 10, fontSize: 12, color: COLORS.rose, fontWeight: 500 }}>✦ Nieuwe cyclus gestart — dag 1!</div>
-        ) : (
-          <button onClick={logNewPeriod} disabled={loggingPeriod} style={{ marginTop: 10, background: "none", border: `1px solid ${COLORS.roseBorder}`, borderRadius: 20, padding: "5px 14px", fontSize: 11, color: COLORS.muted, cursor: "pointer", fontFamily: "inherit" }}>
-            {loggingPeriod ? "Opslaan..." : "↩ Mijn cyclus is begonnen"}
-          </button>
-        )}
-      </div>
-
-      <Card style={{ background: COLORS.cream, border: `0.5px solid ${COLORS.roseBorder}` }}>
-        <Label>Lola zegt</Label>
-        <p style={{ fontSize: 13, color: COLORS.text, lineHeight: 1.7, fontStyle: "italic", marginBottom: 10 }}>
+        <p style={{ fontFamily: "'Cormorant Garamond', serif", fontStyle: "italic", fontSize: 17, color: COLORS.bone, lineHeight: 1.55, margin: "0 0 12px" }}>
           "{lolaObs}"
         </p>
-        <button onClick={onGoToLola} style={{ background: "none", border: `1px solid ${COLORS.roseBorder}`, borderRadius: 20, padding: "6px 16px", fontSize: 12, color: COLORS.rose, cursor: "pointer", fontFamily: "inherit" }}>
+        <button onClick={onGoToLola} style={{ background: "transparent", border: `1px solid rgba(244,236,221,0.35)`, borderRadius: 20, padding: "6px 16px", fontSize: 12, color: COLORS.bone, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", opacity: 0.85 }}>
           Vertel Lola →
         </button>
-      </Card>
+      </div>
 
-      {/* Ochtend check-in */}
-      <Card>
-        {todayCheckin ? (
-          <>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <Label>Ochtend check-in ✦</Label>
-              <button onClick={() => onCheckin("ochtend")} style={{ background: "none", border: `1px solid ${COLORS.roseBorder}`, borderRadius: 20, padding: "4px 12px", fontSize: 11, color: COLORS.muted, cursor: "pointer", fontFamily: "inherit" }}>Wijzigen</button>
-            </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {todayCheckin.wake_mood !== null && <span style={{ fontSize: 12, background: COLORS.roseLight, border: `0.5px solid ${COLORS.roseBorder}`, borderRadius: 20, padding: "4px 12px", color: COLORS.text }}>{WAKE_MOODS[todayCheckin.wake_mood]} {WAKE_LABELS[todayCheckin.wake_mood]}</span>}
-              {todayCheckin.energy && <span style={{ fontSize: 12, background: COLORS.roseLight, border: `0.5px solid ${COLORS.roseBorder}`, borderRadius: 20, padding: "4px 12px", color: COLORS.text }}>Energie {todayCheckin.energy}/5</span>}
-              {todayCheckin.slept && <span style={{ fontSize: 12, background: COLORS.roseLight, border: `0.5px solid ${COLORS.roseBorder}`, borderRadius: 20, padding: "4px 12px", color: COLORS.text }}>{todayCheckin.slept}</span>}
-            </div>
-            {todayCheckin.intention && <p style={{ fontSize: 12, color: COLORS.muted, fontStyle: "italic", marginTop: 8 }}>"{todayCheckin.intention}"</p>}
-          </>
-        ) : (
-          <>
-            <Label>Ochtend check-in</Label>
-            <div style={{ fontSize: 15, fontWeight: 500, color: COLORS.text, marginBottom: 12, marginTop: 4 }}>Hoe ben je wakker geworden?</div>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              {WAKE_MOODS.map((mood, i) => (
-                <button key={i} onClick={() => onCheckin("ochtend")} style={{ width: 48, height: 48, borderRadius: "50%", border: `1.5px solid ${COLORS.roseBorder}`, background: COLORS.white, fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  {mood}
-                </button>
-              ))}
-            </div>
-            <button onClick={() => onCheckin("ochtend")} style={{ width: "100%", marginTop: 14, padding: "13px", borderRadius: 24, background: COLORS.rose, border: "none", color: COLORS.white, fontSize: 14, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
-              Start ochtend check-in →
-            </button>
-          </>
+      {/* ── Cyclus ──────────────────────────── */}
+      <div style={{ background: COLORS.boneWarm, borderRadius: 16, padding: "16px 18px", border: `0.5px solid ${COLORS.figBorder}` }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+          <div style={{ width: 10, height: 10, borderRadius: "50%", background: phase.color, flexShrink: 0 }} />
+          <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 12, fontWeight: 500, color: COLORS.inkSoft }}>
+            {cycleDay ? `Dag ${cycleDay} · ${phase.name}` : phase.name}
+          </div>
+        </div>
+        <p style={{ fontFamily: "'Cormorant Garamond', serif", fontStyle: "italic", fontSize: 15, color: COLORS.inkSoft, margin: "0 0 10px", lineHeight: 1.5 }}>
+          {phase.tip}
+        </p>
+        {pred && (
+          <div style={{ fontSize: 11, color: COLORS.gray, fontFamily: "'DM Sans', sans-serif" }}>
+            Volgende periode verwacht over {pred.daysUntilNext} dag{pred.daysUntilNext !== 1 ? "en" : ""} — {pred.nextPeriod.toLocaleDateString("nl-NL", { day: "numeric", month: "long" })}
+          </div>
         )}
-      </Card>
-
-      {/* Avond check-in — zichtbaar na 18:00 */}
-      {hour >= 18 && (
-        <Card style={{ background: COLORS.lavender, border: `0.5px solid ${COLORS.lavenderBorder}` }}>
-          {todayAvond ? (
-            <>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <Label>Avond check-in ✦</Label>
-                <button onClick={() => onCheckin("avond")} style={{ background: "none", border: `1px solid ${COLORS.lavenderBorder}`, borderRadius: 20, padding: "4px 12px", fontSize: 11, color: COLORS.muted, cursor: "pointer", fontFamily: "inherit" }}>Wijzigen</button>
-              </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {todayAvond.day_rating && <span style={{ fontSize: 12, background: "rgba(255,255,255,0.6)", border: `0.5px solid ${COLORS.lavenderBorder}`, borderRadius: 20, padding: "4px 12px", color: COLORS.text }}>Dag: {todayAvond.day_rating}/5</span>}
-                {todayAvond.moved !== null && <span style={{ fontSize: 12, background: "rgba(255,255,255,0.6)", border: `0.5px solid ${COLORS.lavenderBorder}`, borderRadius: 20, padding: "4px 12px", color: COLORS.text }}>{todayAvond.moved ? "Bewogen ✓" : "Niet bewogen"}</span>}
-              </div>
-              {todayAvond.gratitude && <p style={{ fontSize: 12, color: COLORS.text, fontStyle: "italic", marginTop: 8 }}>"{todayAvond.gratitude}"</p>}
-            </>
+        <div style={{ marginTop: 10 }}>
+          {periodLogged ? (
+            <div style={{ fontSize: 12, color: COLORS.fig, fontWeight: 500, fontFamily: "'DM Sans', sans-serif" }}>Nieuwe cyclus gestart — dag 1</div>
           ) : (
+            <button onClick={logNewPeriod} disabled={loggingPeriod} style={{ background: "none", border: `1px solid ${COLORS.figBorder}`, borderRadius: 20, padding: "5px 14px", fontSize: 11, color: COLORS.gray, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+              {loggingPeriod ? "Opslaan..." : "↩ Mijn cyclus is begonnen"}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Check-ins vandaag ────────────────── */}
+      <div style={{ display: "flex", gap: 10 }}>
+        {/* Ochtend */}
+        <div style={{ flex: 1, background: COLORS.white, borderRadius: 16, padding: "14px", border: `0.5px solid ${COLORS.figBorder}` }}>
+          <div style={{ fontSize: 10, color: COLORS.gray, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "'DM Sans', sans-serif", marginBottom: 8 }}>Ochtend</div>
+          {todayCheckin ? (
             <>
-              <Label>Avond check-in</Label>
-              <div style={{ fontSize: 13, color: COLORS.text, marginTop: 4, marginBottom: 12 }}>Sluit je dag af met Lola</div>
-              <button onClick={() => onCheckin("avond")} style={{ width: "100%", padding: "13px", borderRadius: 24, background: "rgba(255,255,255,0.5)", border: `1.5px solid ${COLORS.lavenderBorder}`, color: COLORS.text, fontSize: 14, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
-                Start avond check-in →
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {todayCheckin.wake_mood !== null && (
+                  <span style={{ fontSize: 16 }}>{MOODS[todayCheckin.wake_mood]}</span>
+                )}
+                {todayCheckin.energy && (
+                  <span style={{ fontSize: 12, background: COLORS.figLight, borderRadius: 20, padding: "3px 10px", color: COLORS.fig, fontFamily: "'DM Sans', sans-serif" }}>
+                    {todayCheckin.energy}/5
+                  </span>
+                )}
+                {todayCheckin.slept && (
+                  <span style={{ fontSize: 12, background: COLORS.boneWarm, borderRadius: 20, padding: "3px 10px", color: COLORS.inkSoft, fontFamily: "'DM Sans', sans-serif" }}>
+                    {todayCheckin.slept}
+                  </span>
+                )}
+              </div>
+              {todayCheckin.intention && (
+                <p style={{ fontFamily: "'Cormorant Garamond', serif", fontStyle: "italic", fontSize: 13, color: COLORS.gray, marginTop: 8, lineHeight: 1.4 }}>
+                  "{todayCheckin.intention}"
+                </p>
+              )}
+              <button onClick={() => onCheckin("ochtend")} style={{ marginTop: 8, background: "none", border: "none", fontSize: 11, color: COLORS.gray, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", padding: 0 }}>
+                Wijzigen
               </button>
             </>
+          ) : (
+            <button onClick={() => onCheckin("ochtend")} style={{ width: "100%", padding: "10px", borderRadius: 12, background: COLORS.fig, border: "none", color: COLORS.bone, fontSize: 13, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+              Start →
+            </button>
           )}
-        </Card>
-      )}
+        </div>
 
-      <Card>
-        <Label>Voeding vandaag</Label>
+        {/* Avond */}
+        <div style={{ flex: 1, background: COLORS.white, borderRadius: 16, padding: "14px", border: `0.5px solid ${COLORS.figBorder}`, opacity: hour < 16 ? 0.55 : 1 }}>
+          <div style={{ fontSize: 10, color: COLORS.gray, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "'DM Sans', sans-serif", marginBottom: 8 }}>Avond</div>
+          {todayAvond ? (
+            <>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {todayAvond.day_rating && (
+                  <span style={{ fontSize: 12, background: COLORS.figLight, borderRadius: 20, padding: "3px 10px", color: COLORS.fig, fontFamily: "'DM Sans', sans-serif" }}>
+                    Dag {todayAvond.day_rating}/5
+                  </span>
+                )}
+                {todayAvond.moved !== null && (
+                  <span style={{ fontSize: 12, background: COLORS.boneWarm, borderRadius: 20, padding: "3px 10px", color: COLORS.inkSoft, fontFamily: "'DM Sans', sans-serif" }}>
+                    {todayAvond.moved ? "Bewogen ✓" : "Niet bewogen"}
+                  </span>
+                )}
+              </div>
+              <button onClick={() => onCheckin("avond")} style={{ marginTop: 8, background: "none", border: "none", fontSize: 11, color: COLORS.gray, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", padding: 0 }}>
+                Wijzigen
+              </button>
+            </>
+          ) : (
+            <button onClick={() => onCheckin("avond")} disabled={hour < 16} style={{ width: "100%", padding: "10px", borderRadius: 12, background: hour >= 16 ? COLORS.inkSoft : COLORS.boneWarm, border: "none", color: hour >= 16 ? COLORS.bone : COLORS.gray, fontSize: 13, cursor: hour >= 16 ? "pointer" : "default", fontFamily: "'DM Sans', sans-serif" }}>
+              {hour < 16 ? "Vanaf 16:00" : "Start →"}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Voeding ─────────────────────────── */}
+      <div style={{ background: COLORS.white, borderRadius: 16, padding: "16px 18px", border: `0.5px solid ${COLORS.figBorder}` }}>
+        <div style={{ fontSize: 10, color: COLORS.gray, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "'DM Sans', sans-serif", marginBottom: 10 }}>
+          Voeding vandaag
+        </div>
         {todayFood.length === 0 ? (
-          <div style={{ fontSize: 13, color: COLORS.muted }}>Nog niets gelogd vandaag.</div>
+          <div style={{ fontSize: 13, color: COLORS.gray, fontFamily: "'DM Sans', sans-serif" }}>Nog niets gelogd.</div>
         ) : (
           <>
             <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-              {[[kcal, "kcal"], [protein + "g", "eiwit"], [carbs + "g", "koolhyd."], [fat + "g", "vet"]].map(([val, lbl]) => (
-                <div key={lbl} style={{ flex: 1, background: COLORS.roseLight, borderRadius: 14, padding: "10px 6px", textAlign: "center" }}>
-                  <div style={{ fontSize: 15, fontWeight: 500, color: COLORS.text }}>{val}</div>
-                  <div style={{ fontSize: 10, color: COLORS.muted, marginTop: 2 }}>{lbl}</div>
+              {[[kcal, "kcal", COLORS.fig], [protein + "g", "eiwit", COLORS.terra], [fat + "g", "vet", COLORS.gold]].map(([val, lbl, col]) => (
+                <div key={lbl} style={{ flex: 1, background: COLORS.boneWarm, borderRadius: 12, padding: "10px 6px", textAlign: "center" }}>
+                  <div style={{ fontSize: 16, fontWeight: 600, color: col, fontFamily: "'DM Sans', sans-serif" }}>{val}</div>
+                  <div style={{ fontSize: 10, color: COLORS.gray, marginTop: 2, fontFamily: "'DM Sans', sans-serif" }}>{lbl}</div>
                 </div>
               ))}
             </div>
-            <ProgressBar value={kcal} max={1800} />
+            <ProgressBar value={kcal} max={facts.kcal_goal || 1800} />
           </>
         )}
-      </Card>
+      </div>
 
-      <Card>
-        <Label>Vandaag gelogd</Label>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {[
-            { label: "Slaap", value: todayCheckin?.slept || "Niet gelogd", color: COLORS.lavender, border: COLORS.lavenderBorder },
-            { label: "Energie", value: todayCheckin?.energy ? `${todayCheckin.energy}/5` : "Niet gelogd", color: COLORS.roseLight, border: COLORS.roseBorder },
-            { label: "Stemming", value: todayCheckin?.wake_mood !== null && todayCheckin?.wake_mood !== undefined ? WAKE_LABELS[todayCheckin.wake_mood] : "Niet gelogd", color: COLORS.softGreen, border: COLORS.softGreenBorder },
-          ].map((item) => (
-            <div key={item.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: 13, color: COLORS.muted }}>{item.label}</span>
-              <span style={{ fontSize: 12, fontWeight: 500, background: item.color, border: `0.5px solid ${item.border}`, borderRadius: 20, padding: "4px 12px", color: COLORS.text }}>{item.value}</span>
-            </div>
-          ))}
-        </div>
-      </Card>
     </div>
   );
 }
@@ -3048,6 +3047,119 @@ Schrijf in het Nederlands. Max 450 woorden. Doorlopende tekst, geen kopjes. Verw
   );
 }
 
+// ── IK SCREEN (profiel + geheugen + doelen) ───────────────
+function IkScreen({ profile, user, onProfileUpdated, onRestartIntake }) {
+  const [tab, setTab] = useState("profiel");
+  const [memory, setMemory] = useState([]);
+  const [memLoading, setMemLoading] = useState(false);
+
+  useEffect(() => {
+    if (tab !== "geheugen" || !user) return;
+    setMemLoading(true);
+    supabase.from("lola_memory").select("*").eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .then(({ data }) => { setMemory(data || []); setMemLoading(false); });
+  }, [tab, user]);
+
+  async function deleteMemory(id) {
+    await supabase.from("lola_memory").delete().eq("id", id);
+    setMemory(prev => prev.filter(m => m.id !== id));
+  }
+
+  const tabs = [
+    { id: "profiel",  label: "Profiel"  },
+    { id: "geheugen", label: "Geheugen" },
+    { id: "doelen",   label: "Doelen"   },
+  ];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+      {/* Tab-balk */}
+      <div style={{ display: "flex", gap: 0, background: COLORS.boneWarm, borderRadius: 14, padding: 4 }}>
+        {tabs.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{
+            flex: 1, padding: "9px 4px", borderRadius: 10,
+            background: tab === t.id ? COLORS.fig : "transparent",
+            border: "none", cursor: "pointer",
+            fontFamily: "'DM Sans', sans-serif",
+            fontSize: 13, fontWeight: tab === t.id ? 500 : 400,
+            color: tab === t.id ? COLORS.bone : COLORS.gray,
+            transition: "all 0.15s",
+          }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Profiel tab ── */}
+      {tab === "profiel" && (
+        <ProfileScreen
+          profile={profile}
+          user={user}
+          onProfileUpdated={onProfileUpdated}
+          onRestartIntake={onRestartIntake}
+        />
+      )}
+
+      {/* ── Geheugen tab ── */}
+      {tab === "geheugen" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div>
+            <div style={{ fontFamily: "'Cormorant Garamond', serif", fontStyle: "italic", fontSize: 26, color: COLORS.fig }}>
+              Wat Lola onthoudt
+            </div>
+            <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 12, color: COLORS.gray, marginTop: 4, lineHeight: 1.5 }}>
+              Lola schrijft automatisch observaties op tijdens jullie gesprekken. Je kunt ze hier inzien en verwijderen als ze niet kloppen.
+            </div>
+          </div>
+
+          {memLoading && (
+            <div style={{ display: "flex", justifyContent: "center", padding: 24 }}>
+              <LolaSymbol size={28} color={COLORS.figBorder} />
+            </div>
+          )}
+
+          {!memLoading && memory.length === 0 && (
+            <div style={{ background: COLORS.boneWarm, borderRadius: 16, padding: "24px 20px", textAlign: "center" }}>
+              <LolaSymbol size={32} color={COLORS.figBorder} />
+              <p style={{ fontFamily: "'Cormorant Garamond', serif", fontStyle: "italic", fontSize: 16, color: COLORS.gray, marginTop: 12, lineHeight: 1.6 }}>
+                Lola heeft nog niets opgeschreven.<br/>Begin een gesprek — ze luistert.
+              </p>
+            </div>
+          )}
+
+          {!memLoading && memory.map(m => (
+            <div key={m.id} style={{ background: COLORS.white, borderRadius: 14, padding: "14px 16px", border: `0.5px solid ${COLORS.figBorder}`, display: "flex", gap: 12, alignItems: "flex-start" }}>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontFamily: "'Cormorant Garamond', serif", fontStyle: "italic", fontSize: 16, color: COLORS.ink, lineHeight: 1.5, margin: 0 }}>
+                  {m.content}
+                </p>
+                <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 10, color: COLORS.gray, marginTop: 6 }}>
+                  {new Date(m.created_at).toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric" })}
+                </div>
+              </div>
+              <button
+                onClick={() => deleteMemory(m.id)}
+                style={{ background: "none", border: "none", color: COLORS.figBorder, cursor: "pointer", fontSize: 18, lineHeight: 1, flexShrink: 0, padding: 0 }}
+                title="Verwijderen"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Doelen tab ── */}
+      {tab === "doelen" && (
+        <MonthlyGoalsScreen user={user} profile={profile} />
+      )}
+
+    </div>
+  );
+}
+
 // ── MAIN APP ──────────────────────────────────────────────
 export default function App() {
   const [phase, setPhase] = useState("auth");
@@ -3239,7 +3351,7 @@ onSkip={async () => {
     food: <FoodScreen user={user} />,
     history: <HistoryScreen user={user} profile={profile} />,
     goals: <MonthlyGoalsScreen user={user} profile={profile} />,
-    profile: <ProfileScreen profile={profile} user={user} onProfileUpdated={(updated) => setProfile(p => ({ ...p, facts: updated }))} onRestartIntake={() => setPhase("chat")} />,
+    profile: <IkScreen profile={profile} user={user} onProfileUpdated={(updated) => setProfile(p => ({ ...p, facts: updated }))} onRestartIntake={() => setPhase("chat")} />,
   };
 
   // NavBar toont de 5 hoofd-tabs; checkin/food/goals vallen er buiten
