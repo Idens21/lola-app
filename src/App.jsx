@@ -1285,95 +1285,264 @@ function analyzePatterns(allCheckins, allFood, lastperiod, cyclelength) {
 }
 
 // ── LOLA CHAT ─────────────────────────────────────────────
+// ── LOLA CONTEXT LOADER ───────────────────────────────────
+async function loadLolaContext(userId) {
+  const today = new Date().toISOString().slice(0, 10);
+  const startToday = new Date(); startToday.setHours(0, 0, 0, 0);
+  const endToday   = new Date(); endToday.setHours(23, 59, 59, 999);
+  const weekAgo    = new Date(Date.now() - 7  * 86400000).toISOString();
+  const monthAgo   = new Date(Date.now() - 60 * 86400000).toISOString();
+
+  const [
+    { data: todayCheckins },
+    { data: todayFood },
+    { data: recentMemory },
+    { data: weeklySummaries },
+    { data: recentCheckins },
+    { data: allFood },
+  ] = await Promise.all([
+    supabase.from("checkins").select("*").eq("user_id", userId)
+      .gte("created_at", startToday.toISOString()).lte("created_at", endToday.toISOString()),
+    supabase.from("food_logs").select("*").eq("user_id", userId)
+      .gte("created_at", startToday.toISOString()).lte("created_at", endToday.toISOString()),
+    supabase.from("lola_memory").select("*").eq("user_id", userId)
+      .order("created_at", { ascending: false }).limit(15),
+    supabase.from("lola_weekly_summaries").select("*").eq("user_id", userId)
+      .order("week_start", { ascending: false }).limit(4),
+    supabase.from("checkins").select("*").eq("user_id", userId)
+      .gte("created_at", monthAgo).order("created_at", { ascending: false }),
+    supabase.from("food_logs").select("*").eq("user_id", userId)
+      .gte("created_at", monthAgo).order("created_at", { ascending: false }),
+  ]);
+
+  return {
+    today,
+    todayCheckins:    todayCheckins    || [],
+    todayFood:        todayFood        || [],
+    recentMemory:     recentMemory     || [],
+    weeklySummaries:  weeklySummaries  || [],
+    recentCheckins:   recentCheckins   || [],
+    allFood:          allFood          || [],
+  };
+}
+
+// ── LOLA ANTWOORD VERWERKER ───────────────────────────────
+// Parst [ONTHOUD:] en [CHECKIN:] tags, slaat op, retourneert schone tekst
+async function handleLolaResponse(rawReply, userId) {
+  let visible = rawReply;
+
+  // 1. [ONTHOUD: ...] — sla op in lola_memory, strip uit zichtbare tekst
+  const onthoudRegex = /\[ONTHOUD:\s*([\s\S]*?)\]/g;
+  const onthoudMatches = [...rawReply.matchAll(onthoudRegex)];
+  for (const match of onthoudMatches) {
+    const content = match[1].trim();
+    if (content) {
+      await supabase.from("lola_memory").insert({
+        user_id: userId,
+        content,
+        source: "lola",
+      });
+    }
+  }
+  visible = visible.replace(onthoudRegex, "").trim();
+
+  // 2. [CHECKIN: key=value, ...] — sla op als ochtend check-in, strip
+  const checkinRegex = /\[CHECKIN:\s*([\s\S]*?)\]/g;
+  const checkinMatches = [...rawReply.matchAll(checkinRegex)];
+  for (const match of checkinMatches) {
+    const parts = match[1].split(",").map(s => s.trim());
+    const data = {};
+    const SLEEP_MAP = { "kort": "<5 uur", "5u": "5–6 uur", "6u": "6–7 uur", "7u": "7–8 uur", "8u": "8+ uur", "8+": "8+ uur" };
+    for (const part of parts) {
+      const [k, v] = part.split("=").map(s => s.trim().toLowerCase());
+      if (!k || !v) continue;
+      if (k === "energie" || k === "energy") data.energy = Math.min(5, Math.max(1, parseInt(v) || 3));
+      if (k === "slaap" || k === "slept") data.slept = SLEEP_MAP[v] || v;
+      if (k === "stemming" || k === "mood") data.wake_mood = Math.min(4, Math.max(0, parseInt(v) || 2));
+      if (k === "intentie") data.intention = v;
+      if (k === "notitie" || k === "note") data.note = v;
+    }
+    if (Object.keys(data).length > 0) {
+      const today = new Date().toISOString().slice(0, 10);
+      const start = new Date(); start.setHours(0,0,0,0);
+      const end   = new Date(); end.setHours(23,59,59,999);
+      // Controleer of er al een ochtend check-in is vandaag
+      const { data: existing } = await supabase.from("checkins").select("id")
+        .eq("user_id", userId).eq("type", "ochtend")
+        .gte("created_at", start.toISOString()).lte("created_at", end.toISOString())
+        .limit(1);
+      if (existing?.length > 0) {
+        await supabase.from("checkins").update({ ...data }).eq("id", existing[0].id);
+      } else {
+        await supabase.from("checkins").insert({ user_id: userId, type: "ochtend", ...data });
+      }
+    }
+  }
+  visible = visible.replace(checkinRegex, "").trim();
+
+  return visible;
+}
+
+// ── WEKELIJKSE SAMENVATTING ───────────────────────────────
+async function generateWeeklySummary(userId, profile, ctx) {
+  const now   = new Date();
+  const day   = now.getDay(); // 0=zo
+  const diff  = (day === 0 ? -6 : 1 - day);
+  const weekStart = new Date(now); weekStart.setDate(now.getDate() + diff); weekStart.setHours(0,0,0,0);
+  const weekKey   = weekStart.toISOString().slice(0, 10);
+
+  // Al een samenvatting deze week?
+  const { data: existing } = await supabase.from("lola_weekly_summaries")
+    .select("id").eq("user_id", userId).eq("week_start", weekKey).limit(1);
+  if (existing?.length > 0) return;
+
+  // Onvoldoende data?
+  if ((ctx.recentCheckins || []).length < 3) return;
+
+  const facts    = profile?.facts || {};
+  const patterns = analyzePatterns(ctx.recentCheckins, ctx.allFood, facts.lastperiod, facts.cyclelength);
+  const MOODS    = ["Zwaar", "Moeizaam", "Oké", "Fris", "Uitgerust"];
+
+  const checkinSummary = ctx.recentCheckins.slice(0, 7).map(c => {
+    const d = c.created_at?.slice(0, 10);
+    return `${d}: energie ${c.energy ?? "?"}/5, slaap ${c.slept ?? "?"}, stemming ${MOODS[c.wake_mood] ?? "?"}`;
+  }).join("\n");
+
+  const prompt = `Je hebt de afgelopen week de data gezien van ${facts.name || "deze vrouw"}.
+
+Check-ins deze week:
+${checkinSummary}
+
+${patterns ? `Patronen: gem. energie ${patterns.recentAvgEnergy}/5, ${patterns.fatCorr || ""} ${patterns.proteinCorr || ""}` : ""}
+
+Schrijf een korte, persoonlijke wekelijkse samenvatting (max 120 woorden) die:
+- De opvallendste patronen benoemt die jij als coach hebt waargenomen
+- Verbanden legt tussen slaap, energie en cyclus
+- Eindigt met één concrete observatie of vraag voor de komende week
+- Warm en direct is, in jouw eigen stijl
+
+Schrijf in het Nederlands, eerste persoon (ik heb gezien...).`;
+
+  const summary = await askLola(
+    [{ role: "user", content: prompt }],
+    "Je bent Lola. Schrijf een beknopte wekelijkse observatie als coach. Max 120 woorden."
+  );
+
+  await supabase.from("lola_weekly_summaries").insert({
+    user_id:    userId,
+    week_start: weekKey,
+    summary,
+  });
+}
+
+// ── LOLA SCREEN ───────────────────────────────────────────
 function LolaScreen({ profile, user }) {
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [messages,   setMessages]   = useState([]);
+  const [input,      setInput]      = useState("");
+  const [loading,    setLoading]    = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
-  const [contextData, setContextData] = useState(null);
-  const bottomRef = useRef(null);
+  const [ctx,        setCtx]        = useState(null);
+  const bottomRef   = useRef(null);
   const hasScrolled = useRef(false);
 
-  // Scroll naar beneden bij nieuwe berichten
   useEffect(() => {
     if (messages.length === 0) return;
     bottomRef.current?.scrollIntoView({ behavior: hasScrolled.current ? "smooth" : "auto" });
     hasScrolled.current = true;
   }, [messages]);
 
-  // Laad alles tegelijk: chatgeschiedenis + check-ins + voeding
+  // Laad chatgeschiedenis + context + genereer wekelijkse samenvatting
   useEffect(() => {
     if (!user) { setDataLoaded(true); return; }
-    const today = new Date().toISOString().slice(0, 10);
+
     Promise.all([
       supabase.from("lola_messages").select("*").eq("user_id", user.id).order("created_at", { ascending: true }),
-      supabase.from("checkins").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
-      supabase.from("food_logs").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
-    ]).then(([{ data: history }, { data: checkins }, { data: food }]) => {
+      loadLolaContext(user.id),
+    ]).then(async ([{ data: history }, context]) => {
       const loaded = history || [];
       setMessages(loaded.map(m => ({ id: m.id, from: m.role === "user" ? "user" : "lola", text: m.content, created_at: m.created_at })));
-      setContextData({ checkins: checkins || [], food: food || [], today });
+      setCtx(context);
       setDataLoaded(true);
 
-      // Stuur welkomstbericht als er nog geen geschiedenis is
+      // Welkomstbericht bij leeg gesprek
       if (loaded.length === 0) {
         const name = profile?.facts?.name || "liefste";
-        const greeting = { role: "assistant", content: `Hoi ${name} ✦ Ik ben er. Wat speelt er vandaag?` };
-        supabase.from("lola_messages").insert({ user_id: user.id, ...greeting }).then(({ data }) => {
-          setMessages([{ from: "lola", text: greeting.content, created_at: new Date().toISOString() }]);
-        });
+        const greeting = { role: "assistant", content: `Hoi ${name} — ik ben er. Wat speelt er vandaag?` };
+        supabase.from("lola_messages").insert({ user_id: user.id, ...greeting });
+        setMessages([{ from: "lola", text: greeting.content, created_at: new Date().toISOString() }]);
       }
+
+      // Wekelijkse samenvatting op de achtergrond
+      generateWeeklySummary(user.id, profile, context).catch(() => {});
     });
   }, [user]);
 
   function buildLolaSystem() {
     const facts = profile?.facts || {};
     const { day: cycleDay, phase } = getCycleInfo(facts.lastperiod, facts.cyclelength);
-    const checkins = contextData?.checkins || [];
-    const food = contextData?.food || [];
-    const today = contextData?.today || new Date().toISOString().slice(0, 10);
-    const MOODS = ["Zwaar", "Moeizaam", "Oké", "Fris", "Uitgerust"];
-    const todayCheckin = checkins.find(c => c.created_at?.slice(0, 10) === today);
-    const todayFood = food.filter(f => f.created_at?.slice(0, 10) === today);
-    const totalKcal = todayFood.reduce((s, f) => s + (f.kcal || 0), 0);
-    const totalProtein = todayFood.reduce((s, f) => s + (f.protein || 0), 0);
-    const totalFat = todayFood.reduce((s, f) => s + (f.fat || 0), 0);
-    const patterns = analyzePatterns(checkins, food, facts.lastperiod, facts.cyclelength);
+    const context = ctx || {};
+    const MOODS   = ["Zwaar", "Moeizaam", "Oké", "Fris", "Uitgerust"];
 
-    return `Je bent Lola, een warme maar eerlijke persoonlijke levenscoach voor vrouwen. Je hebt een doorlopend gesprek met haar — je kent haar goed en bouwt voort op alles wat eerder is gezegd.
+    const todayOchtend = context.todayCheckins?.find(c => c.type === "ochtend");
+    const todayAvond   = context.todayCheckins?.find(c => c.type === "avond");
+    const totalKcal    = (context.todayFood || []).reduce((s, f) => s + (f.kcal    || 0), 0);
+    const totalProtein = (context.todayFood || []).reduce((s, f) => s + (f.protein || 0), 0);
+    const totalFat     = (context.todayFood || []).reduce((s, f) => s + (f.fat     || 0), 0);
+    const patterns     = analyzePatterns(context.recentCheckins || [], context.allFood || [], facts.lastperiod, facts.cyclelength);
+
+    const memoryBlock = (context.recentMemory || []).length > 0
+      ? (context.recentMemory || []).map(m => `• ${m.content}`).join("\n")
+      : "Nog geen herinneringen opgeslagen.";
+
+    const summaryBlock = (context.weeklySummaries || []).length > 0
+      ? (context.weeklySummaries || []).slice(0, 2).map(s => `Week van ${s.week_start}:\n${s.summary}`).join("\n\n")
+      : null;
+
+    return `Je bent Lola — een warme maar eerlijke persoonlijke coach voor vrouwen.
+
+Je werkt vanuit drie modi, die je vloeiend afwisselt:
+🪞 Getuige — je benoemt wat je waarneemt zonder oordeel
+🔁 Spiegel — je spiegelt haar eigen woorden en patronen terug
+🧭 Gids — je geeft concrete, passende richting
 
 ── WIE ZE IS ──
-${facts.personality_profile
-  ? facts.personality_profile
-  : `Naam: ${facts.name || "onbekend"} | Sterrenbeeld: ${getZodiac(facts.birthdate) || "?"} | HD: ${facts.hdtype || "?"} profiel ${facts.hdprofile || "?"} autoriteit ${facts.hdauthority || "?"}`
-}
+${facts.personality_profile || `${facts.name || "onbekend"} · ${facts.hdtype || "?"} · ${getZodiac(facts.birthdate) || "?"}`}
 
 ── FEITEN ──
-Naam: ${facts.name || "onbekend"} · ${facts.birthdate ? Math.floor((Date.now() - new Date(facts.birthdate)) / (365.25 * 86400000)) + " jaar" : ""} · ${getZodiac(facts.birthdate) || ""}
-Werk: ${facts.work || "onbekend"} · Relatie: ${facts.relationship_status || "onbekend"} · Kinderen: ${facts.children || "onbekend"} · Woont: ${facts.living_situation || "onbekend"}
+${facts.name || "?"} · ${facts.birthdate ? Math.floor((Date.now() - new Date(facts.birthdate)) / (365.25 * 86400000)) + " jaar" : ""} · ${getZodiac(facts.birthdate) || ""}
+Werk: ${facts.work || "?"} · Relatie: ${facts.relationship_status || "?"} · Kinderen: ${facts.children || "?"} · Woont: ${facts.living_situation || "?"}
 Human Design: ${facts.hdtype || "?"} · Profiel ${facts.hdprofile || "?"} · Autoriteit ${facts.hdauthority || "?"}
-Cycluslengte: ${facts.cyclelength || "onbekend"}
 
-── CYCLUS VANDAAG ──
-${phase.name}${cycleDay ? ` · dag ${cycleDay}` : ""} — ${phase.desc}
+── CYCLUS ──
+${phase.name}${cycleDay ? ` · dag ${cycleDay}` : ""} (cycluslengte: ${facts.cyclelength || "?"})
 
 ── CHECK-IN VANDAAG ──
-${todayCheckin
-  ? `Stemming: ${MOODS[todayCheckin.wake_mood] ?? "?"} | Energie: ${todayCheckin.energy ?? "?"}/5 | Slaap: ${todayCheckin.slept ?? "?"}`
-    + (todayCheckin.intention ? `\nIntentie: "${todayCheckin.intention}"` : "")
-    + (todayCheckin.note ? `\nNotitie: "${todayCheckin.note}"` : "")
-  : "Geen check-in vandaag."}
+${todayOchtend
+  ? `Ochtend — stemming: ${MOODS[todayOchtend.wake_mood] ?? "?"} | energie: ${todayOchtend.energy ?? "?"}/5 | slaap: ${todayOchtend.slept ?? "?"}`
+    + (todayOchtend.intention ? ` | intentie: "${todayOchtend.intention}"` : "")
+  : "Geen ochtend check-in."}
+${todayAvond
+  ? `Avond — dag: ${todayAvond.day_rating ?? "?"}/5 | bewogen: ${todayAvond.moved ? "ja" : "nee"}`
+    + (todayAvond.gratitude ? ` | dankbaar: "${todayAvond.gratitude}"` : "")
+  : ""}
 
 ── VOEDING VANDAAG ──
-${todayFood.length > 0 ? `${totalKcal} kcal · ${totalProtein}g eiwit · ${totalFat}g vet` : "Nog niets gelogd."}
+${(context.todayFood || []).length > 0 ? `${totalKcal} kcal · ${totalProtein}g eiwit · ${totalFat}g vet` : "Nog niets gelogd."}
 
-── PATROONANALYSE ──
-${!patterns ? "Onvoldoende data (min. 3 check-ins)." : `Gem. energie 7 dagen: ${patterns.recentAvgEnergy}/5 · Lage energie cyclusdagen: ${patterns.lowEnergyDays.join(", ") || "geen"} · Slechte slaap cyclusdagen: ${patterns.poorSleepDays.join(", ") || "geen"} · ${patterns.fatCorr || ""} ${patterns.proteinCorr || ""}`}
+── LOLA'S GEHEUGEN ──
+Dit heeft Lola over haar onthouden:
+${memoryBlock}
 
-── HOE JE REAGEERT ──
-- Dit is een doorlopend gesprek. Verwijs naar wat ze eerder zei als dat relevant is.
-- Benoem patronen concreet en specifiek als het aanvoelt.
-- Eén vraag per bericht. Warm, eerlijk, kort. Schrijf in het Nederlands.`;
+${summaryBlock ? `── WEKELIJKSE OBSERVATIES ──\n${summaryBlock}\n` : ""}
+── PATRONEN ──
+${!patterns ? "Onvoldoende data." : `Gem. energie 7 dagen: ${patterns.recentAvgEnergy}/5 · Lage energie cyclusdagen: ${patterns.lowEnergyDays.join(", ") || "geen"} · ${patterns.fatCorr || ""} ${patterns.proteinCorr || ""}`}
+
+── INSTRUCTIES ──
+- Bouw voort op alles wat je weet en hebt onthouden
+- Als ze iets zegt wat je wil onthouden voor later: voeg [ONTHOUD: korte observatie in derde persoon] toe aan je bericht — dit wordt automatisch opgeslagen en jij ziet het zelf niet meer
+- Als ze haar stemming/energie/slaap noemt via chat: voeg [CHECKIN: energie=3, slaap=7u, stemming=2] toe (onzichtbaar voor haar) — dit logt een check-in automatisch
+- Eén vraag per bericht. Warm, eerlijk, concreet. Nederlands.
+- Schrijf kort — max 4 zinnen tenzij ze uitleg vraagt`;
   }
 
   async function send() {
@@ -1382,21 +1551,26 @@ ${!patterns ? "Onvoldoende data (min. 3 check-ins)." : `Gem. energie 7 dagen: ${
     setInput("");
     setLoading(true);
 
-    // Sla gebruikersbericht op en toon het direct
-    const userRow = { user_id: user.id, role: "user", content: userMsg };
-    const { data: savedUser } = await supabase.from("lola_messages").insert(userRow).select().single();
-    const newUserMsg = { id: savedUser?.id, from: "user", text: userMsg, created_at: savedUser?.created_at };
-    const updatedMessages = [...messages, newUserMsg];
+    // Sla gebruikersbericht op
+    const { data: savedUser } = await supabase.from("lola_messages")
+      .insert({ user_id: user.id, role: "user", content: userMsg }).select().single();
+    const updatedMessages = [...messages, { id: savedUser?.id, from: "user", text: userMsg, created_at: savedUser?.created_at }];
     setMessages(updatedMessages);
 
-    // Stuur de volledige geschiedenis naar Claude (max 60 berichten)
+    // Vraag Lola
     const apiMessages = updatedMessages.slice(-60).map(m => ({ role: m.from === "user" ? "user" : "assistant", content: m.text }));
-    const reply = await askLola(apiMessages, buildLolaSystem());
+    const rawReply = await askLola(apiMessages, buildLolaSystem());
 
-    // Sla Lola's antwoord op
-    const lolaRow = { user_id: user.id, role: "assistant", content: reply };
-    const { data: savedLola } = await supabase.from("lola_messages").insert(lolaRow).select().single();
-    setMessages(prev => [...prev, { id: savedLola?.id, from: "lola", text: reply, created_at: savedLola?.created_at }]);
+    // Verwerk tags ([ONTHOUD:] en [CHECKIN:]), krijg schone tekst terug
+    const cleanReply = await handleLolaResponse(rawReply, user.id);
+
+    // Sla schone tekst op en toon
+    const { data: savedLola } = await supabase.from("lola_messages")
+      .insert({ user_id: user.id, role: "assistant", content: cleanReply }).select().single();
+    setMessages(prev => [...prev, { id: savedLola?.id, from: "lola", text: cleanReply, created_at: savedLola?.created_at }]);
+
+    // Context bijwerken zodat nieuwe check-ins zichtbaar zijn
+    loadLolaContext(user.id).then(setCtx).catch(() => {});
     setLoading(false);
   }
 
