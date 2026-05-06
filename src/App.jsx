@@ -8,26 +8,111 @@ const supabase = createClient(
 );
 
 const COLORS = {
-  cream: "#FEF9F5",
-  rose: "#C4748A",
-  roseDark: "#A85A72",
-  roseLight: "#F5EAF0",
-  roseBorder: "#E8C4D0",
-  lavender: "#EDE8F5",
-  lavenderBorder: "#D8CCF0",
-  text: "#3D2828",
-  muted: "#A89090",
-  white: "#FFFFFF",
-  softGreen: "#EAF4EE",
+  // ── Nieuw palet (fig / terra / bone) ───────────────────
+  bone:          "#F4ECDD",   // achtergrond
+  boneWarm:      "#EBDFC8",   // kaart achtergrond
+  fig:           "#5C2A3E",   // primair
+  figDark:       "#3A1727",   // donker primair
+  figLight:      "#F2E8EC",   // lichte tint
+  figBorder:     "#DCC4CC",   // rand
+  terra:         "#B8633F",   // accent 2
+  terraLight:    "#F5E8E0",   // licht terra
+  terraBorder:   "#DEB9A0",   // terra rand
+  gold:          "#9B7A3F",   // goud
+  goldSoft:      "#C4A876",   // zacht goud
+  ink:           "#1A0D14",   // donkere tekst
+  inkSoft:       "#3A2530",   // zachtere inkt
+  gray:          "#6B5B5B",   // muted tekst
+  white:         "#FFFFFF",
+  softGreen:     "#EAF4EE",
   softGreenBorder: "#C4DDC8",
+
+  // ── Achterwaartse compatibiliteit (oude namen → nieuwe waarden)
+  cream:         "#F4ECDD",
+  rose:          "#5C2A3E",
+  roseDark:      "#3A1727",
+  roseLight:     "#F2E8EC",
+  roseBorder:    "#DCC4CC",
+  lavender:      "#F5E8E0",
+  lavenderBorder:"#DEB9A0",
+  text:          "#1A0D14",
+  muted:         "#6B5B5B",
 };
 
 const PHASES = [
-  { name: "Menstruatie", days: "Dag 1–5", color: "#E8A0B4", label: "Ongesteld", tip: "Je lichaam verdient rust vandaag. Zacht bewegen is genoeg." },
-  { name: "Folliculair", days: "Dag 6–13", color: "#A0C4E8", label: "Opbouwen", tip: "Je energie komt terug. Goed moment voor nieuwe dingen." },
-  { name: "Ovulatoir", days: "Dag 14–16", color: "#A0E8C4", label: "Piek", tip: "Je bent op je sterkst. Gebruik die energie bewust." },
-  { name: "Luteaal", days: "Dag 17–28", color: "#C4748A", label: "Afschalen", tip: "Meer naar binnen. Warmte, rust en zachtheid mogen nu." },
+  { name: "Menstruatie", days: "Dag 1–5",  color: "#5C2A3E", label: "Ongesteld", tip: "Je lichaam verdient rust vandaag. Zacht bewegen is genoeg." },
+  { name: "Folliculair", days: "Dag 6–13", color: "#9B7A3F", label: "Opbouwen", tip: "Je energie komt terug. Goed moment voor nieuwe dingen." },
+  { name: "Ovulatoir",   days: "Dag 14–16",color: "#B8633F", label: "Piek",      tip: "Je bent op je sterkst. Gebruik die energie bewust." },
+  { name: "Luteaal",     days: "Dag 17–28",color: "#3A1727", label: "Afschalen", tip: "Meer naar binnen. Warmte, rust en zachtheid mogen nu." },
 ];
+
+// ── LOLA SYMBOOL (vrouwelijk figuur, één doorlopende lijn) ─
+function LolaSymbol({ size = 32, color = COLORS.fig, strokeWidth = 2 }) {
+  const scale = size / 220;
+  return (
+    <svg
+      width={size * (180/220)}
+      height={size}
+      viewBox="0 0 180 220"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M 90 20
+           C 78 22, 72 32, 78 42
+           C 84 50, 92 50, 92 50
+           C 92 60, 82 65, 76 78
+           C 70 90, 72 105, 80 115
+           C 70 125, 62 140, 65 158
+           C 67 172, 75 185, 78 200
+           C 79 210, 82 215, 85 215
+           L 95 215
+           C 98 215, 101 210, 102 200
+           C 105 185, 113 172, 115 158
+           C 118 140, 110 125, 100 115
+           C 108 105, 110 90, 104 78
+           C 98 65, 88 60, 88 50
+           C 88 50, 96 50, 102 42
+           C 108 32, 102 22, 90 20 Z"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+// ── LOLA LOGO (symbool + wordmark) ────────────────────────
+function LolaLogo({ size = "md", variant = "default" }) {
+  const configs = {
+    sm: { symbolSize: 18, fontSize: 20, gap: 6 },
+    md: { symbolSize: 24, fontSize: 26, gap: 8 },
+    lg: { symbolSize: 36, fontSize: 40, gap: 10 },
+    xl: { symbolSize: 56, fontSize: 64, gap: 14 },
+  };
+  const cfg = configs[size] || configs.md;
+  const isDark = variant === "dark";   // fig achtergrond, bone tekst
+  const symbolColor = isDark ? COLORS.bone : COLORS.fig;
+  const textColor   = isDark ? COLORS.bone : COLORS.fig;
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: cfg.gap }}>
+      <LolaSymbol size={cfg.symbolSize} color={symbolColor} strokeWidth={1.8} />
+      <span style={{
+        fontFamily: "'Italiana', serif",
+        fontSize: cfg.fontSize,
+        letterSpacing: "0.08em",
+        lineHeight: 1,
+        color: textColor,
+        fontWeight: 400,
+        userSelect: "none",
+      }}>
+        LOLA
+      </span>
+    </div>
+  );
+}
 
 function getCycleInfoForDate(lastperiod, cyclelength, date) {
   if (!lastperiod) return { day: null, phase: PHASES[3] };
@@ -204,7 +289,7 @@ function AuthScreen({ onAuth }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
       <div style={{ marginBottom: 32 }}>
-        <div style={{ fontSize: 36, color: COLORS.rose, marginBottom: 12 }}>✦</div>
+        <div style={{ marginBottom: 16 }}><LolaSymbol size={28} color={COLORS.fig} /></div>
         <h2 style={{ fontSize: 28, fontWeight: 500, color: COLORS.text, marginBottom: 8, letterSpacing: "-0.02em" }}>
           {mode === "login" ? "Welkom terug." : "Begin hier."}
         </h2>
@@ -283,11 +368,9 @@ function NavBar({ active, onChange }) {
       id: "lola",
       label: "Lola",
       icon: (
-        <svg viewBox="0 0 22 22" fill="none">
-          <ellipse cx="11" cy="9" rx="4" ry="5" stroke="currentColor" strokeWidth="1.5"/>
-          <path d="M7 14c0 3 1.5 5 4 5s4-2 4-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-          <path d="M11 4V2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-        </svg>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 22, height: 22 }}>
+          <LolaSymbol size={18} color="currentColor" strokeWidth={2.2} />
+        </div>
       ),
     },
     {
@@ -332,13 +415,34 @@ function NavBar({ active, onChange }) {
     },
   ];
   return (
-    <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: COLORS.cream, borderTop: `0.5px solid ${COLORS.roseBorder}`, display: "flex", justifyContent: "space-around", padding: "10px 0 env(safe-area-inset-bottom, 20px)", zIndex: 100 }}>
-      {items.map((item) => (
-        <button key={item.id} onClick={() => onChange(item.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", color: active === item.id ? COLORS.rose : COLORS.muted, fontFamily: "inherit", fontSize: 10, fontWeight: active === item.id ? 500 : 400, padding: "4px 8px" }}>
-          <div style={{ width: 22, height: 22 }}>{item.icon}</div>
-          {item.label}
-        </button>
-      ))}
+    <div style={{
+      position: "fixed", bottom: 0, left: 0, right: 0,
+      background: COLORS.bone,
+      borderTop: `0.5px solid ${COLORS.figBorder}`,
+      display: "flex", justifyContent: "space-around",
+      padding: "10px 0 env(safe-area-inset-bottom, 20px)",
+      zIndex: 100,
+    }}>
+      {items.map((item) => {
+        const isActive = active === item.id;
+        return (
+          <button
+            key={item.id}
+            onClick={() => onChange(item.id)}
+            style={{
+              display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+              background: "none", border: "none", cursor: "pointer",
+              color: isActive ? COLORS.fig : COLORS.gray,
+              fontFamily: "'DM Sans', sans-serif",
+              fontSize: 10, fontWeight: isActive ? 600 : 400,
+              padding: "4px 8px", transition: "color 0.15s",
+            }}
+          >
+            <div style={{ width: 22, height: 22 }}>{item.icon}</div>
+            <span style={{ letterSpacing: isActive ? "0.02em" : 0 }}>{item.label}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -358,7 +462,7 @@ function IntakeFacts({ onDone, onSkip }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
       <div style={{ marginBottom: 32 }}>
-        <div style={{ fontSize: 36, color: COLORS.rose, marginBottom: 12 }}>✦</div>
+        <div style={{ marginBottom: 16 }}><LolaSymbol size={28} color={COLORS.fig} /></div>
         <h2 style={{ fontSize: 28, fontWeight: 500, color: COLORS.text, marginBottom: 8, letterSpacing: "-0.02em" }}>Hoi, ik ben Lola.</h2>
         <p style={{ fontSize: 14, color: COLORS.muted, lineHeight: 1.7 }}>Voordat we echt kennismaken, heb ik een paar feiten nodig. Daarna gaan we het gesprek aan.</p>
       </div>
@@ -560,7 +664,6 @@ Schrijf in het Nederlands. Max 450 woorden. Geen kopjes, gewoon doorlopende teks
         </button>
       </div>
 
-      <style>{`@keyframes pulse { 0%, 100% { opacity: 0.3; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.1); } }`}</style>
     </div>
   );
 }
@@ -568,18 +671,18 @@ Schrijf in het Nederlands. Max 450 woorden. Geen kopjes, gewoon doorlopende teks
 // ── WELKOMST SCHERM ───────────────────────────────────────
 function WelcomeScreen({ profile, onStart }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: "40px 24px", textAlign: "center" }}>
-      <div style={{ fontSize: 48, marginBottom: 16 }}>✦</div>
-      <h1 style={{ fontSize: 36, fontWeight: 300, color: COLORS.text, marginBottom: 8, letterSpacing: "-0.02em" }}>
-        Welkom,<br /><span style={{ fontWeight: 600 }}>{profile.facts.name}</span>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: "40px 24px", textAlign: "center", background: COLORS.bone }}>
+      <div style={{ marginBottom: 24 }}><LolaSymbol size={56} color={COLORS.fig} /></div>
+      <h1 style={{ fontFamily: "'Italiana', serif", fontSize: 48, fontWeight: 400, color: COLORS.fig, marginBottom: 8, letterSpacing: "0.04em" }}>
+        Welkom,<br />{profile.facts.name}
       </h1>
-      <p style={{ fontSize: 14, color: COLORS.muted, lineHeight: 1.8, maxWidth: 340, marginBottom: 32 }}>
-        Ik ken je nu een stukje beter. Jouw Lola is klaar — persoonlijk, voor jou.
+      <p style={{ fontFamily: "'Cormorant Garamond', serif", fontStyle: "italic", fontSize: 18, color: COLORS.inkSoft, lineHeight: 1.7, maxWidth: 340, marginBottom: 36 }}>
+        Ik ken je nu een stukje beter.<br/>Jouw Lola is klaar.
       </p>
-      <div style={{ background: COLORS.roseLight, borderRadius: 24, padding: "20px 24px", maxWidth: 360, marginBottom: 36, border: `1px solid ${COLORS.roseBorder}`, textAlign: "left" }}>
-        <div style={{ fontSize: 10, color: COLORS.rose, fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 8 }}>Lola zegt</div>
-        <p style={{ fontSize: 14, color: COLORS.text, fontStyle: "italic", lineHeight: 1.7, margin: 0 }}>
-          "Je hebt jezelf vandaag een geschenk gegeven — de bereidheid om eerlijk te kijken. Dat is zeldzamer dan je denkt. Laten we samen aan de slag gaan."
+      <div style={{ background: COLORS.fig, borderRadius: 16, padding: "20px 24px", maxWidth: 360, marginBottom: 36, textAlign: "left" }}>
+        <div style={{ fontSize: 10, color: COLORS.goldSoft, fontWeight: 500, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 8, fontFamily: "'DM Sans', sans-serif" }}>Lola zegt</div>
+        <p style={{ fontFamily: "'Cormorant Garamond', serif", fontStyle: "italic", fontSize: 18, color: COLORS.bone, lineHeight: 1.6, margin: 0 }}>
+          "Je hebt jezelf vandaag een geschenk gegeven — de bereidheid om eerlijk te kijken. Dat is zeldzamer dan je denkt."
         </p>
       </div>
       <button onClick={onStart} style={{ background: COLORS.rose, color: COLORS.white, border: "none", borderRadius: 28, padding: "16px 40px", fontSize: 16, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
@@ -874,8 +977,8 @@ function CheckInScreen({ onDone, user, checkinType: initialType = "ochtend" }) {
   if (submitted) {
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "60vh", textAlign: "center", gap: 16 }}>
-        <div style={{ fontSize: 48 }}>✦</div>
-        <div style={{ fontSize: 22, fontWeight: 500, color: COLORS.text }}>{existing ? "Gewijzigd" : "Dankjewel"}</div>
+        <LolaSymbol size={48} color={COLORS.fig} />
+        <div style={{ fontFamily: "'Italiana', serif", fontSize: 28, letterSpacing: "0.04em", color: COLORS.fig }}>{existing ? "Gewijzigd" : "Dankjewel"}</div>
         <p style={{ fontSize: 14, color: COLORS.muted, lineHeight: 1.7, maxWidth: 300 }}>Lola heeft je check-in ontvangen. Ze denkt de hele dag met je mee.</p>
         {intention && (
           <div style={{ background: COLORS.roseLight, borderRadius: 20, padding: "16px 20px", border: `0.5px solid ${COLORS.roseBorder}`, maxWidth: 300 }}>
@@ -1308,9 +1411,9 @@ ${!patterns ? "Onvoldoende data (min. 3 check-ins)." : `Gem. energie 7 dagen: ${
   }
 
   if (!dataLoaded) return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "calc(100dvh - 160px)", gap: 12 }}>
-      <div style={{ fontSize: 28, color: COLORS.rose }}>✦</div>
-      <div style={{ fontSize: 13, color: COLORS.muted }}>Lola leest je gegevens...</div>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "calc(100dvh - 120px)", gap: 16 }}>
+      <LolaSymbol size={40} color={COLORS.fig} />
+      <div style={{ fontSize: 13, color: COLORS.gray, fontFamily: "'DM Sans', sans-serif" }}>Lola leest je gegevens...</div>
     </div>
   );
 
@@ -1318,47 +1421,70 @@ ${!patterns ? "Onvoldoende data (min. 3 check-ins)." : `Gem. energie 7 dagen: ${
   let lastDateLabel = null;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "calc(100dvh - 160px)", width: "100%", maxWidth: "100%", overflow: "hidden" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 40, height: 40, borderRadius: "50%", background: COLORS.roseLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, border: `1px solid ${COLORS.roseBorder}` }}>✦</div>
+    <div style={{ display: "flex", flexDirection: "column", height: "calc(100dvh - 80px)", width: "100%", maxWidth: "100%", overflow: "hidden" }}>
+
+      {/* ── Lola header ─────────────────────────────── */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 0 12px", borderBottom: `0.5px solid ${COLORS.figBorder}`, marginBottom: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ width: 42, height: 42, borderRadius: "50%", background: COLORS.fig, display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${COLORS.figDark}` }}>
+            <LolaSymbol size={22} color={COLORS.bone} strokeWidth={1.8} />
+          </div>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 500, color: COLORS.text }}>Lola</div>
-            <div style={{ fontSize: 11, color: COLORS.muted }}>{messages.length > 1 ? `${messages.length} berichten` : "Jouw persoonlijke coach"}</div>
+            <div style={{ fontFamily: "'Italiana', serif", fontSize: 22, letterSpacing: "0.06em", color: COLORS.fig, lineHeight: 1 }}>LOLA</div>
+            <div style={{ fontSize: 11, color: COLORS.gray, fontFamily: "'DM Sans', sans-serif", marginTop: 2 }}>
+              {messages.length > 1 ? `${messages.length} berichten` : "Jouw persoonlijke coach"}
+            </div>
           </div>
         </div>
       </div>
 
-      <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12, paddingBottom: 16 }}>
+      {/* ── Berichten ────────────────────────────────── */}
+      <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, paddingBottom: 16 }}>
         {messages.map((msg, i) => {
           const dateLabel = msg.created_at ? formatDateLabel(msg.created_at) : null;
           const showDate = dateLabel && dateLabel !== lastDateLabel;
           if (showDate) lastDateLabel = dateLabel;
+          const isLola = msg.from === "lola";
           return (
             <div key={msg.id || i}>
               {showDate && (
-                <div style={{ textAlign: "center", fontSize: 11, color: COLORS.muted, margin: "8px 0", display: "flex", alignItems: "center", gap: 8 }}>
-                  <div style={{ flex: 1, height: "0.5px", background: COLORS.roseBorder }} />
+                <div style={{ textAlign: "center", fontSize: 10, color: COLORS.gray, margin: "10px 0", display: "flex", alignItems: "center", gap: 8, fontFamily: "'DM Sans', sans-serif" }}>
+                  <div style={{ flex: 1, height: "0.5px", background: COLORS.figBorder }} />
                   {dateLabel}
-                  <div style={{ flex: 1, height: "0.5px", background: COLORS.roseBorder }} />
+                  <div style={{ flex: 1, height: "0.5px", background: COLORS.figBorder }} />
                 </div>
               )}
-              <div style={{ display: "flex", flexDirection: "column", alignItems: msg.from === "user" ? "flex-end" : "flex-start" }}>
-                {msg.from === "lola" && <div style={{ fontSize: 10, color: COLORS.muted, marginBottom: 3, fontWeight: 500 }}>Lola</div>}
-                <div style={{ maxWidth: "75%", wordBreak: "break-word", padding: "11px 15px", borderRadius: 18, fontSize: 13, lineHeight: 1.6, background: msg.from === "lola" ? COLORS.roseLight : COLORS.rose, color: msg.from === "lola" ? COLORS.text : COLORS.white, borderBottomLeftRadius: msg.from === "lola" ? 4 : 18, borderBottomRightRadius: msg.from === "user" ? 4 : 18, border: msg.from === "lola" ? `0.5px solid ${COLORS.roseBorder}` : "none" }}>
-                  {msg.from === "lola" ? (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: isLola ? "flex-start" : "flex-end" }}>
+                <div style={{
+                  maxWidth: "80%", wordBreak: "break-word",
+                  padding: isLola ? "14px 18px" : "11px 16px",
+                  borderRadius: 20,
+                  borderBottomLeftRadius: isLola ? 4 : 20,
+                  borderBottomRightRadius: isLola ? 20 : 4,
+                  // Lola: fig achtergrond met bone tekst (statement versie)
+                  background: isLola ? COLORS.fig : COLORS.boneWarm,
+                  color: isLola ? COLORS.bone : COLORS.ink,
+                  border: isLola ? "none" : `0.5px solid ${COLORS.figBorder}`,
+                  // Lola spreekt in Cormorant Garamond italic
+                  fontFamily: isLola ? "'Cormorant Garamond', serif" : "'DM Sans', sans-serif",
+                  fontStyle: isLola ? "italic" : "normal",
+                  fontSize: isLola ? 16 : 14,
+                  lineHeight: isLola ? 1.65 : 1.55,
+                  fontWeight: isLola ? 400 : 400,
+                }}>
+                  {isLola ? (
                     <ReactMarkdown
                       components={{
                         p: ({ children }) => <p style={{ margin: "0 0 6px 0" }}>{children}</p>,
-                        strong: ({ children }) => <strong style={{ fontWeight: 600, color: COLORS.roseDark }}>{children}</strong>,
-                        em: ({ children }) => <em style={{ fontStyle: "italic" }}>{children}</em>,
-                        h1: ({ children }) => <div style={{ fontSize: 15, fontWeight: 600, color: COLORS.roseDark, margin: "10px 0 4px" }}>{children}</div>,
-                        h2: ({ children }) => <div style={{ fontSize: 14, fontWeight: 600, color: COLORS.roseDark, margin: "8px 0 4px" }}>{children}</div>,
-                        h3: ({ children }) => <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text, margin: "6px 0 2px" }}>{children}</div>,
-                        ul: ({ children }) => <ul style={{ paddingLeft: 16, margin: "4px 0" }}>{children}</ul>,
-                        ol: ({ children }) => <ol style={{ paddingLeft: 16, margin: "4px 0" }}>{children}</ol>,
-                        li: ({ children }) => <li style={{ marginBottom: 2 }}>{children}</li>,
-                        hr: () => <hr style={{ border: "none", borderTop: `0.5px solid ${COLORS.roseBorder}`, margin: "8px 0" }} />,
+                        strong: ({ children }) => <strong style={{ fontWeight: 600, color: COLORS.goldSoft }}>{children}</strong>,
+                        em: ({ children }) => <em style={{ fontStyle: "normal", color: COLORS.bone }}>{children}</em>,
+                        h1: ({ children }) => <div style={{ fontFamily: "'Italiana', serif", fontStyle: "normal", fontSize: 20, color: COLORS.bone, margin: "10px 0 4px", letterSpacing: "0.04em" }}>{children}</div>,
+                        h2: ({ children }) => <div style={{ fontFamily: "'Italiana', serif", fontStyle: "normal", fontSize: 18, color: COLORS.bone, margin: "8px 0 4px" }}>{children}</div>,
+                        h3: ({ children }) => <div style={{ fontStyle: "normal", fontSize: 14, fontWeight: 600, color: COLORS.bone, margin: "6px 0 2px", fontFamily: "'DM Sans', sans-serif" }}>{children}</div>,
+                        ul: ({ children }) => <ul style={{ paddingLeft: 18, margin: "4px 0" }}>{children}</ul>,
+                        ol: ({ children }) => <ol style={{ paddingLeft: 18, margin: "4px 0" }}>{children}</ol>,
+                        li: ({ children }) => <li style={{ marginBottom: 3 }}>{children}</li>,
+                        hr: () => <hr style={{ border: "none", borderTop: `0.5px solid rgba(244,236,221,0.3)`, margin: "10px 0" }} />,
                       }}
                     >
                       {msg.text}
@@ -1366,7 +1492,7 @@ ${!patterns ? "Onvoldoende data (min. 3 check-ins)." : `Gem. energie 7 dagen: ${
                   ) : msg.text}
                 </div>
                 {msg.created_at && (
-                  <div style={{ fontSize: 10, color: COLORS.muted, marginTop: 2 }}>
+                  <div style={{ fontSize: 10, color: COLORS.gray, marginTop: 3, fontFamily: "'DM Sans', sans-serif" }}>
                     {new Date(msg.created_at).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}
                   </div>
                 )}
@@ -1376,23 +1502,33 @@ ${!patterns ? "Onvoldoende data (min. 3 check-ins)." : `Gem. energie 7 dagen: ${
         })}
         {loading && (
           <div style={{ alignSelf: "flex-start" }}>
-            <div style={{ fontSize: 10, color: COLORS.muted, marginBottom: 3, fontWeight: 500 }}>Lola</div>
-            <div style={{ background: COLORS.roseLight, border: `0.5px solid ${COLORS.roseBorder}`, borderRadius: 18, borderBottomLeftRadius: 4, padding: "11px 15px", display: "flex", gap: 4 }}>
-              {[0,1,2].map((i) => <div key={i} style={{ width: 6, height: 6, borderRadius: "50%", background: COLORS.rose, animation: `pulse 1.2s ease-in-out ${i*0.2}s infinite` }} />)}
+            <div style={{ background: COLORS.fig, borderRadius: 20, borderBottomLeftRadius: 4, padding: "14px 18px", display: "flex", gap: 5 }}>
+              {[0,1,2].map((i) => <div key={i} style={{ width: 6, height: 6, borderRadius: "50%", background: COLORS.bone, animation: `pulse 1.2s ease-in-out ${i*0.2}s infinite` }} />)}
             </div>
           </div>
         )}
         <div ref={bottomRef} />
       </div>
 
-      <div style={{ display: "flex", gap: 10, paddingTop: 12, borderTop: `0.5px solid ${COLORS.roseBorder}` }}>
-        <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()} placeholder="Zeg iets tegen Lola..." style={{ flex: 1, minWidth: 0, padding: "11px 16px", borderRadius: 24, border: `1px solid ${COLORS.roseBorder}`, background: COLORS.white, color: COLORS.text, fontSize: 13, fontFamily: "inherit", outline: "none" }} />
+      {/* ── Input ─────────────────────────────────────── */}
+      <div style={{ display: "flex", gap: 8, paddingTop: 12, borderTop: `0.5px solid ${COLORS.figBorder}` }}>
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
+          placeholder="Zeg iets tegen Lola..."
+          style={{ flex: 1, minWidth: 0, padding: "12px 16px", borderRadius: 24, border: `1px solid ${COLORS.figBorder}`, background: COLORS.white, color: COLORS.ink, fontSize: 14, fontFamily: "'DM Sans', sans-serif", outline: "none" }}
+        />
         <MicButton onResult={(text) => setInput(prev => prev ? prev + " " + text : text)} />
-        <button onClick={send} disabled={loading} style={{ width: 44, height: 44, borderRadius: "50%", background: loading ? COLORS.roseBorder : COLORS.rose, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M8 3l5 5-5 5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        <button
+          onClick={send} disabled={loading}
+          style={{ width: 46, height: 46, borderRadius: "50%", background: loading ? COLORS.figBorder : COLORS.fig, border: "none", cursor: loading ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M3 8h10M8 3l5 5-5 5" stroke={COLORS.bone} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
         </button>
       </div>
-      <style>{`@keyframes pulse { 0%, 100% { opacity: 0.3; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.1); } }`}</style>
     </div>
   );
 }
@@ -1648,7 +1784,6 @@ function FoodScreen({ user }) {
             <div style={{ width: 16, height: 16, borderRadius: "50%", border: `2px solid ${COLORS.rose}`, borderTopColor: "transparent", animation: "spin 0.8s linear infinite" }} />
             Lola herkent je eten...
           </div>
-          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </Card>
       )}
 
@@ -2788,18 +2923,11 @@ export default function App() {
 
   if (phase === "auth") {
     return (
-      <div style={{ minHeight: "100vh", background: COLORS.cream, fontFamily: "'DM Sans','Helvetica Neue',sans-serif" }}>
-        <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
-        <style>{`
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { overflow-x: hidden; }
-  input, button, textarea, select { max-width: 100%; font-family: inherit; }
-  ::-webkit-scrollbar { display: none; }
-`}</style>
+      <div style={{ minHeight: "100vh", background: COLORS.bone, fontFamily: "'DM Sans','Helvetica Neue',sans-serif" }}>
+        <style>{`* { box-sizing: border-box; margin: 0; padding: 0; } body { background: ${COLORS.bone}; overflow-x: hidden; } input, button, textarea, select { max-width: 100%; font-family: inherit; } ::-webkit-scrollbar { display: none; }`}</style>
         <div style={{ maxWidth: 480, margin: "0 auto", width: "100%", padding: "40px 20px 60px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 40 }}>
-            <span style={{ fontSize: 16, color: COLORS.rose }}>✦</span>
-            <span style={{ fontSize: 18, fontWeight: 600, color: COLORS.text, letterSpacing: "-0.02em" }}>lola</span>
+          <div style={{ marginBottom: 40 }}>
+            <LolaLogo size="md" />
           </div>
           <AuthScreen onAuth={(u) => { setUser(u); setPhase("facts"); }} />
         </div>
@@ -2808,18 +2936,11 @@ export default function App() {
   }
   if (phase === "facts") {
     return (
-      <div style={{ minHeight: "100vh", background: COLORS.cream, fontFamily: "'DM Sans','Helvetica Neue',sans-serif" }}>
-        <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
-        <style>{`
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { overflow-x: hidden; }
-  input, button, textarea, select { max-width: 100%; font-family: inherit; }
-  ::-webkit-scrollbar { display: none; }
-`}</style>
+      <div style={{ minHeight: "100vh", background: COLORS.bone, fontFamily: "'DM Sans','Helvetica Neue',sans-serif" }}>
+        <style>{`* { box-sizing: border-box; margin: 0; padding: 0; } body { background: ${COLORS.bone}; overflow-x: hidden; } input, button, textarea, select { max-width: 100%; font-family: inherit; } ::-webkit-scrollbar { display: none; }`}</style>
         <div style={{ maxWidth: 480, margin: "0 auto", width: "100%", padding: "40px 20px 60px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 40 }}>
-            <span style={{ fontSize: 16, color: COLORS.rose }}>✦</span>
-            <span style={{ fontSize: 18, fontWeight: 600, color: COLORS.text, letterSpacing: "-0.02em" }}>lola</span>
+          <div style={{ marginBottom: 40 }}>
+            <LolaLogo size="md" />
           </div>
 <IntakeFacts onDone={async (facts) => {
   const { error } = await supabase.from("profiles").upsert({
@@ -2850,14 +2971,8 @@ onSkip={async () => {
 
   if (phase === "chat") {
     return (
-      <div style={{ minHeight: "100vh", background: COLORS.cream, fontFamily: "'DM Sans','Helvetica Neue',sans-serif" }}>
-        <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
-        <style>{`
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { overflow-x: hidden; }
-  input, button, textarea, select { max-width: 100%; font-family: inherit; }
-  ::-webkit-scrollbar { display: none; }
-`}</style>
+      <div style={{ minHeight: "100vh", background: COLORS.bone, fontFamily: "'DM Sans','Helvetica Neue',sans-serif" }}>
+        <style>{`* { box-sizing: border-box; margin: 0; padding: 0; } body { background: ${COLORS.bone}; overflow-x: hidden; } input, button, textarea, select { max-width: 100%; font-family: inherit; } ::-webkit-scrollbar { display: none; }`}</style>
         <style>{`
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { overflow-x: hidden; }
@@ -2865,9 +2980,8 @@ onSkip={async () => {
   ::-webkit-scrollbar { display: none; }
 `}</style>
         <div style={{ maxWidth: 480, margin: "0 auto", width: "100%", padding: "40px 20px 60px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 24 }}>
-            <span style={{ fontSize: 16, color: COLORS.rose }}>✦</span>
-            <span style={{ fontSize: 18, fontWeight: 600, color: COLORS.text, letterSpacing: "-0.02em" }}>lola</span>
+          <div style={{ marginBottom: 24 }}>
+            <LolaLogo size="md" />
           </div>
           <IntakeChat facts={profile.facts} onDone={async (fullProfile) => {
             if (fullProfile.personality_profile && user) {
@@ -2883,14 +2997,8 @@ onSkip={async () => {
 
   if (phase === "welcome") {
     return (
-      <div style={{ minHeight: "100vh", background: COLORS.cream, fontFamily: "'DM Sans','Helvetica Neue',sans-serif" }}>
-        <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
-        <style>{`
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { overflow-x: hidden; }
-  input, button, textarea, select { max-width: 100%; font-family: inherit; }
-  ::-webkit-scrollbar { display: none; }
-`}</style>
+      <div style={{ minHeight: "100vh", background: COLORS.bone, fontFamily: "'DM Sans','Helvetica Neue',sans-serif" }}>
+        <style>{`* { box-sizing: border-box; margin: 0; padding: 0; } body { background: ${COLORS.bone}; overflow-x: hidden; } input, button, textarea, select { max-width: 100%; font-family: inherit; } ::-webkit-scrollbar { display: none; }`}</style>
         <style>{`
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { overflow-x: hidden; }
@@ -2904,29 +3012,29 @@ onSkip={async () => {
 
   const { day: cycleDay, phase: currentPhase } = getCycleInfo(profile?.facts?.lastperiod, profile?.facts?.cyclelength);
 
-  // "loggen" tab: toon checkin-keuze + voedingstracker gecombineerd
+  // "loggen" tab: check-in keuze + voedingstracker
   function LoggenScreen() {
     const hour = new Date().getHours();
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <div style={{ fontSize: 22, fontWeight: 500, color: COLORS.text }}>Loggen</div>
+        <div style={{ fontFamily: "'Cormorant Garamond', serif", fontStyle: "italic", fontSize: 26, fontWeight: 300, color: COLORS.fig, lineHeight: 1.1 }}>
+          Loggen
+        </div>
         <div style={{ display: "flex", gap: 10 }}>
           <button
             onClick={() => { setCheckinType("ochtend"); setScreen("checkin"); }}
-            style={{ flex: 1, padding: "16px 12px", borderRadius: 20, background: COLORS.roseLight, border: `1px solid ${COLORS.roseBorder}`, cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
-            <div style={{ fontSize: 16, marginBottom: 4 }}>🌤</div>
-            <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.text }}>Ochtend check-in</div>
-            <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>Stemming, energie, slaap</div>
+            style={{ flex: 1, padding: "18px 14px", borderRadius: 16, background: COLORS.figLight, border: `1px solid ${COLORS.figBorder}`, cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+            <div style={{ fontSize: 18, marginBottom: 6 }}>🌤</div>
+            <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.ink }}>Ochtend</div>
+            <div style={{ fontSize: 11, color: COLORS.gray, marginTop: 2 }}>Stemming, energie, slaap</div>
           </button>
-          {hour >= 16 && (
-            <button
-              onClick={() => { setCheckinType("avond"); setScreen("checkin"); }}
-              style={{ flex: 1, padding: "16px 12px", borderRadius: 20, background: COLORS.lavender, border: `1px solid ${COLORS.lavenderBorder}`, cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
-              <div style={{ fontSize: 16, marginBottom: 4 }}>🌙</div>
-              <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.text }}>Avond check-in</div>
-              <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>Dag, dankbaarheid</div>
-            </button>
-          )}
+          <button
+            onClick={() => { setCheckinType("avond"); setScreen("checkin"); }}
+            style={{ flex: 1, padding: "18px 14px", borderRadius: 16, background: COLORS.boneWarm, border: `1px solid ${COLORS.figBorder}`, cursor: "pointer", fontFamily: "inherit", textAlign: "left", opacity: hour >= 16 ? 1 : 0.5 }}>
+            <div style={{ fontSize: 18, marginBottom: 6 }}>🌙</div>
+            <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.ink }}>Avond</div>
+            <div style={{ fontSize: 11, color: COLORS.gray, marginTop: 2 }}>Dag, dankbaarheid</div>
+          </button>
         </div>
         <FoodScreen user={user} />
       </div>
@@ -2959,25 +3067,27 @@ onSkip={async () => {
     : "lola";
 
   return (
-    <div style={{ minHeight: "100vh", background: COLORS.cream, fontFamily: "'DM Sans','Helvetica Neue',sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: COLORS.bone, fontFamily: "'DM Sans','Helvetica Neue',sans-serif" }}>
       <style>{`
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { overflow-x: hidden; }
+  body { background: ${COLORS.bone}; overflow-x: hidden; }
   input, button, textarea, select { max-width: 100%; font-family: inherit; }
   ::-webkit-scrollbar { display: none; }
+  @keyframes pulse { 0%,100%{opacity:.3;transform:scale(.8)} 50%{opacity:1;transform:scale(1.1)} }
+  @keyframes spin { to{transform:rotate(360deg)} }
 `}</style>
-      <div style={{ maxWidth: 480, margin: "0 auto", width: "100%", padding: "40px 20px 100px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 16, color: COLORS.rose }}>✦</span>
-            <span style={{ fontSize: 18, fontWeight: 600, color: COLORS.text, letterSpacing: "-0.02em" }}>lola</span>
+      <div style={{ maxWidth: 480, margin: "0 auto", width: "100%", padding: "32px 20px 100px" }}>
+        {/* Header — alleen tonen buiten de Lola-chat */}
+        {screen !== "lola" && (
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+            <LolaLogo size="md" />
+            {cycleDay && (
+              <div style={{ fontSize: 11, color: COLORS.gray, background: COLORS.figLight, padding: "4px 12px", borderRadius: 20, border: `0.5px solid ${COLORS.figBorder}`, fontFamily: "'DM Sans', sans-serif" }}>
+                Dag {cycleDay}
+              </div>
+            )}
           </div>
-          {cycleDay && (
-            <div style={{ fontSize: 11, color: COLORS.muted, background: COLORS.roseLight, padding: "4px 12px", borderRadius: 20, border: `0.5px solid ${COLORS.roseBorder}` }}>
-              Dag {cycleDay}
-            </div>
-          )}
-        </div>
+        )}
         {screenMap[screen]}
       </div>
       <NavBar active={navScreen} onChange={(id) => {
