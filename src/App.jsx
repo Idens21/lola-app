@@ -693,24 +693,53 @@ Max 400 woorden. Geen kopjes, doorlopende tekst. Niet eindigen met een vraag.`;
 
 // ── WELKOMST SCHERM ───────────────────────────────────────
 function WelcomeScreen({ profile, onStart }) {
+  const name    = profile?.facts?.name || "";
+  const portrait = profile?.facts?.personality_profile || profile?.personality_profile || "";
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: "40px 24px", textAlign: "center", background: COLORS.bone }}>
-      <div style={{ marginBottom: 24 }}><LolaSymbol size={56} color={COLORS.fig} /></div>
-      <h1 style={{ fontFamily: "'Italiana', serif", fontSize: 48, fontWeight: 400, color: COLORS.fig, marginBottom: 8, letterSpacing: "0.04em" }}>
-        Welkom,<br />{profile.facts.name}
-      </h1>
-      <p style={{ fontFamily: "'Cormorant Garamond', serif", fontStyle: "italic", fontSize: 18, color: COLORS.inkSoft, lineHeight: 1.7, maxWidth: 340, marginBottom: 36 }}>
-        Ik ken je nu een stukje beter.<br/>Jouw Lola is klaar.
-      </p>
-      <div style={{ background: COLORS.fig, borderRadius: 16, padding: "20px 24px", maxWidth: 360, marginBottom: 36, textAlign: "left" }}>
-        <div style={{ fontSize: 10, color: COLORS.goldSoft, fontWeight: 500, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 8, fontFamily: "'DM Sans', sans-serif" }}>Lola zegt</div>
-        <p style={{ fontFamily: "'Cormorant Garamond', serif", fontStyle: "italic", fontSize: 18, color: COLORS.bone, lineHeight: 1.6, margin: 0 }}>
-          "Je hebt jezelf vandaag een geschenk gegeven — de bereidheid om eerlijk te kijken. Dat is zeldzamer dan je denkt."
+    <div style={{ minHeight: "100vh", background: COLORS.bone, fontFamily: "'DM Sans', sans-serif" }}>
+      <div style={{ maxWidth: 480, margin: "0 auto", padding: "60px 24px 48px", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
+
+        <div style={{ marginBottom: 24 }}><LolaSymbol size={52} color={COLORS.fig} /></div>
+
+        <h1 style={{ fontFamily: "'Italiana', serif", fontSize: 44, fontWeight: 400, color: COLORS.fig, marginBottom: 6, letterSpacing: "0.04em", lineHeight: 1.1 }}>
+          {name ? `Welkom,\n${name}` : "Welkom"}
+        </h1>
+        <p style={{ fontFamily: "'Cormorant Garamond', serif", fontStyle: "italic", fontSize: 17, color: COLORS.gray, lineHeight: 1.6, marginBottom: 32, marginTop: 8 }}>
+          Ik ken je nu een stukje beter.
         </p>
+
+        {/* Portret — het echte resultaat van de intake */}
+        {portrait ? (
+          <div style={{ width: "100%", background: COLORS.fig, borderRadius: 16, padding: "22px 24px", marginBottom: 32, textAlign: "left" }}>
+            <div style={{ fontSize: 10, color: COLORS.goldSoft, fontWeight: 500, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 12, fontFamily: "'DM Sans', sans-serif" }}>
+              Lola's portret van jou
+            </div>
+            <p style={{ fontFamily: "'Cormorant Garamond', serif", fontStyle: "italic", fontSize: 16, color: COLORS.bone, lineHeight: 1.65, margin: 0 }}>
+              {portrait.length > 400 ? portrait.slice(0, 400) + "…" : portrait}
+            </p>
+            <div style={{ marginTop: 12, fontSize: 11, color: "rgba(244,236,221,0.55)", fontFamily: "'DM Sans', sans-serif" }}>
+              Je vindt het volledige portret in Ik → Profiel
+            </div>
+          </div>
+        ) : (
+          <div style={{ width: "100%", background: COLORS.fig, borderRadius: 16, padding: "22px 24px", marginBottom: 32, textAlign: "left" }}>
+            <div style={{ fontSize: 10, color: COLORS.goldSoft, fontWeight: 500, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 10, fontFamily: "'DM Sans', sans-serif" }}>
+              Lola zegt
+            </div>
+            <p style={{ fontFamily: "'Cormorant Garamond', serif", fontStyle: "italic", fontSize: 17, color: COLORS.bone, lineHeight: 1.6, margin: 0 }}>
+              "Je hebt jezelf vandaag een geschenk gegeven — de bereidheid om eerlijk te kijken. Dat is zeldzamer dan je denkt."
+            </p>
+          </div>
+        )}
+
+        <button
+          onClick={onStart}
+          style={{ background: COLORS.fig, color: COLORS.bone, border: "none", borderRadius: 28, padding: "16px 48px", fontSize: 15, fontWeight: 500, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", letterSpacing: "0.02em" }}
+        >
+          Open Lola →
+        </button>
       </div>
-      <button onClick={onStart} style={{ background: COLORS.rose, color: COLORS.white, border: "none", borderRadius: 28, padding: "16px 40px", fontSize: 16, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
-        Open Lola →
-      </button>
     </div>
   );
 }
