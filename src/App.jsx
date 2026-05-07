@@ -433,11 +433,11 @@ function NavBar({ active, onChange }) {
 
   return (
     <div style={{
-      position: "fixed", bottom: 0, left: 0, right: 0,
+      // Geen position: fixed meer — zit nu in de flex-flow van de App shell
       background: COLORS.bone,
       borderTop: `0.5px solid ${COLORS.figBorder}`,
       paddingBottom: "env(safe-area-inset-bottom, 16px)",
-      zIndex: 100,
+      flexShrink: 0,
       // uitsparing in het midden voor de FAB
       display: "flex", alignItems: "flex-end",
     }}>
@@ -3701,38 +3701,44 @@ export default function App() {
     }} />
   );
 
-  // ── Lola screen: één vaste flexbox-kolom (chat + navbar samen)
-  // zodat de navbar altijd pal onder het invoerveld staat
-  if (screen === "lola") {
-    return (
-      <div style={{ position: "fixed", inset: 0, display: "flex", justifyContent: "center", background: COLORS.bone, fontFamily: "'DM Sans',sans-serif" }}>
-        <style>{globalStyle}</style>
-        <div style={{ width: "100%", maxWidth: 480, display: "flex", flexDirection: "column", height: "100%" }}>
-          <LolaScreen profile={profile} user={user} />
-          {navBar}
-        </div>
-      </div>
-    );
-  }
-
-  // ── Alle andere schermen
+  // ── Alle schermen: één vaste flexbox-shell (content scrollt, navbar vast onderin)
+  // Hierdoor staat de navbar altijd in de flex-flow en overlapt nooit invoervelden.
+  // iOS keyboard duwt de hele kolom omhoog — gefocust veld blijft boven navbar.
   return (
-    <div style={{ minHeight: "100dvh", background: COLORS.bone, fontFamily: "'DM Sans','Helvetica Neue',sans-serif" }}>
+    <div style={{
+      position: "fixed", inset: 0,
+      display: "flex", justifyContent: "center",
+      background: COLORS.bone,
+      fontFamily: "'DM Sans','Helvetica Neue',sans-serif",
+    }}>
       <style>{globalStyle}</style>
+      <div style={{ width: "100%", maxWidth: 480, display: "flex", flexDirection: "column", height: "100%" }}>
 
-      {/* Andere schermen: in padded container */}
-      <div style={{ maxWidth: 480, margin: "0 auto", width: "100%", padding: "32px 20px 100px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-          <LolaLogo size="md" />
-          {cycleDay && (
-            <div style={{ fontSize: 11, color: COLORS.gray, background: COLORS.figLight, padding: "4px 12px", borderRadius: 20, border: `0.5px solid ${COLORS.figBorder}`, fontFamily: "'DM Sans', sans-serif" }}>
-              Dag {cycleDay}
+        {/* ── Scrollbaar content gebied ── */}
+        <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}>
+          {screen === "lola" ? (
+            // Lola chat vult de volledige scrollbare ruimte
+            <LolaScreen profile={profile} user={user} />
+          ) : (
+            // Alle andere schermen: header + content met padding
+            <div style={{ padding: "32px 20px 32px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+                <LolaLogo size="md" />
+                {cycleDay && (
+                  <div style={{ fontSize: 11, color: COLORS.gray, background: COLORS.figLight, padding: "4px 12px", borderRadius: 20, border: `0.5px solid ${COLORS.figBorder}`, fontFamily: "'DM Sans', sans-serif" }}>
+                    Dag {cycleDay}
+                  </div>
+                )}
+              </div>
+              {screenMap[screen]}
             </div>
           )}
         </div>
-        {screenMap[screen]}
+
+        {/* ── Navbar — vast onderin, nooit overlappend ── */}
+        {navBar}
+
       </div>
-      {navBar}
     </div>
   );
 }
