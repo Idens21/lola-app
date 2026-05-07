@@ -1458,14 +1458,30 @@ Schrijf in het Nederlands, eerste persoon (ik heb gezien...).`;
 }
 
 // ── LOLA SCREEN ───────────────────────────────────────────
+// Navbar hoogte (px) — moet overeenkomen met de NavBar component
+const NAV_H = 64;
+
 function LolaScreen({ profile, user }) {
   const [messages,   setMessages]   = useState([]);
   const [input,      setInput]      = useState("");
   const [loading,    setLoading]    = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [ctx,        setCtx]        = useState(null);
+  // Keyboard-aware hoogte via visualViewport
+  const [vpHeight,   setVpHeight]   = useState(() =>
+    (window.visualViewport?.height ?? window.innerHeight)
+  );
   const bottomRef   = useRef(null);
   const hasScrolled = useRef(false);
+
+  // Luister naar visualViewport resize (keyboard open/dicht op iOS/Android)
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const onResize = () => setVpHeight(vv.height);
+    vv.addEventListener("resize", onResize);
+    return () => vv.removeEventListener("resize", onResize);
+  }, []);
 
   useEffect(() => {
     if (messages.length === 0) return;
@@ -1606,8 +1622,25 @@ ${!patterns ? "Onvoldoende data." : `Gem. energie 7 dagen: ${patterns.recentAvgE
     return d.toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long" });
   }
 
+  // Gedeelde container stijl: position fixed, hoogte = visualViewport - navbar
+  const chatContainerStyle = {
+    position: "fixed",
+    top: 0,
+    left: "50%",
+    transform: "translateX(-50%)",
+    width: "100%",
+    maxWidth: 480,
+    height: vpHeight - NAV_H,
+    display: "flex",
+    flexDirection: "column",
+    background: COLORS.bone,
+    zIndex: 10,
+    padding: "0 20px",
+    overflow: "hidden",
+  };
+
   if (!dataLoaded) return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "calc(100dvh - 120px)", gap: 16 }}>
+    <div style={{ ...chatContainerStyle, alignItems: "center", justifyContent: "center", gap: 16 }}>
       <LolaSymbol size={40} color={COLORS.fig} />
       <div style={{ fontSize: 13, color: COLORS.gray, fontFamily: "'DM Sans', sans-serif" }}>Lola leest je gegevens...</div>
     </div>
@@ -1617,7 +1650,7 @@ ${!patterns ? "Onvoldoende data." : `Gem. energie 7 dagen: ${patterns.recentAvgE
   let lastDateLabel = null;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "calc(100dvh - 80px)", width: "100%", maxWidth: "100%", overflow: "hidden" }}>
+    <div style={chatContainerStyle}>
 
       {/* ── Lola header ─────────────────────────────── */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 0 12px", borderBottom: `0.5px solid ${COLORS.figBorder}`, marginBottom: 12 }}>
@@ -3624,7 +3657,7 @@ export default function App() {
     : "lola";
 
   return (
-    <div style={{ minHeight: "100vh", background: COLORS.bone, fontFamily: "'DM Sans','Helvetica Neue',sans-serif" }}>
+    <div style={{ minHeight: "100dvh", background: COLORS.bone, fontFamily: "'DM Sans','Helvetica Neue',sans-serif" }}>
       <style>{`
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: ${COLORS.bone}; overflow-x: hidden; }
@@ -3633,9 +3666,15 @@ export default function App() {
   @keyframes pulse { 0%,100%{opacity:.3;transform:scale(.8)} 50%{opacity:1;transform:scale(1.1)} }
   @keyframes spin { to{transform:rotate(360deg)} }
 `}</style>
-      <div style={{ maxWidth: 480, margin: "0 auto", width: "100%", padding: "32px 20px 100px" }}>
-        {/* Header — alleen tonen buiten de Lola-chat */}
-        {screen !== "lola" && (
+
+      {/* Lola chat: buiten de padded container, eigen fixed layout */}
+      {screen === "lola" && (
+        <LolaScreen profile={profile} user={user} />
+      )}
+
+      {/* Alle andere schermen: in padded container */}
+      {screen !== "lola" && (
+        <div style={{ maxWidth: 480, margin: "0 auto", width: "100%", padding: "32px 20px 100px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
             <LolaLogo size="md" />
             {cycleDay && (
@@ -3644,9 +3683,9 @@ export default function App() {
               </div>
             )}
           </div>
-        )}
-        {screenMap[screen]}
-      </div>
+          {screenMap[screen]}
+        </div>
+      )}
       <NavBar active={navScreen} onChange={(id) => {
         if (id === "loggen") { setScreen("loggen"); }
         else navigateTo(id);
