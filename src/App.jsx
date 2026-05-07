@@ -363,16 +363,7 @@ function ProgressBar({ value, max }) {
   );
 }
 function NavBar({ active, onChange }) {
-  const items = [
-    {
-      id: "lola",
-      label: "Lola",
-      icon: (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 22, height: 22 }}>
-          <LolaSymbol size={18} color="currentColor" strokeWidth={2.2} />
-        </div>
-      ),
-    },
+  const left = [
     {
       id: "home",
       label: "Vandaag",
@@ -393,6 +384,8 @@ function NavBar({ active, onChange }) {
         </svg>
       ),
     },
+  ];
+  const right = [
     {
       id: "history",
       label: "Inzichten",
@@ -414,35 +407,84 @@ function NavBar({ active, onChange }) {
       ),
     },
   ];
+
+  const TAB_H = 60; // hoogte balk zonder safe area
+
+  function TabBtn({ item }) {
+    const isActive = active === item.id;
+    return (
+      <button
+        onClick={() => onChange(item.id)}
+        style={{
+          flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+          gap: 3, background: "none", border: "none", cursor: "pointer",
+          color: isActive ? COLORS.fig : COLORS.gray,
+          fontFamily: "'DM Sans', sans-serif",
+          fontSize: 10, fontWeight: isActive ? 600 : 400,
+          height: TAB_H, padding: 0,
+          transition: "color 0.15s",
+        }}
+      >
+        <div style={{ width: 22, height: 22 }}>{item.icon}</div>
+        <span>{item.label}</span>
+      </button>
+    );
+  }
+
   return (
     <div style={{
       position: "fixed", bottom: 0, left: 0, right: 0,
       background: COLORS.bone,
       borderTop: `0.5px solid ${COLORS.figBorder}`,
-      display: "flex", justifyContent: "space-around",
-      padding: "10px 0 env(safe-area-inset-bottom, 20px)",
+      paddingBottom: "env(safe-area-inset-bottom, 16px)",
       zIndex: 100,
+      // uitsparing in het midden voor de FAB
+      display: "flex", alignItems: "flex-end",
     }}>
-      {items.map((item) => {
-        const isActive = active === item.id;
-        return (
-          <button
-            key={item.id}
-            onClick={() => onChange(item.id)}
-            style={{
-              display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
-              background: "none", border: "none", cursor: "pointer",
-              color: isActive ? COLORS.fig : COLORS.gray,
-              fontFamily: "'DM Sans', sans-serif",
-              fontSize: 10, fontWeight: isActive ? 600 : 400,
-              padding: "4px 8px", transition: "color 0.15s",
-            }}
-          >
-            <div style={{ width: 22, height: 22 }}>{item.icon}</div>
-            <span style={{ letterSpacing: isActive ? "0.02em" : 0 }}>{item.label}</span>
-          </button>
-        );
-      })}
+      {/* Linker tabs */}
+      <div style={{ flex: 1, display: "flex" }}>
+        {left.map(item => <TabBtn key={item.id} item={item} />)}
+      </div>
+
+      {/* Midden: FAB Lola knop — steekt uit boven balk */}
+      <div style={{ width: 80, display: "flex", flexDirection: "column", alignItems: "center", position: "relative", height: TAB_H }}>
+        <button
+          onClick={() => onChange("lola")}
+          style={{
+            position: "absolute",
+            top: -20,                    // steekt 20px uit boven de balk
+            width: 56, height: 56,
+            borderRadius: "50%",
+            background: COLORS.fig,
+            border: `3px solid ${COLORS.bone}`,  // witte rand zorgt voor "floating" look
+            boxShadow: "0 4px 16px rgba(92,42,62,0.35)",
+            cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            transition: "transform 0.15s, box-shadow 0.15s",
+          }}
+          onMouseDown={e => e.currentTarget.style.transform = "scale(0.93)"}
+          onMouseUp={e => e.currentTarget.style.transform = "scale(1)"}
+          onTouchStart={e => e.currentTarget.style.transform = "scale(0.93)"}
+          onTouchEnd={e => e.currentTarget.style.transform = "scale(1)"}
+        >
+          <LolaSymbol size={26} color={COLORS.bone} strokeWidth={1.8} />
+        </button>
+        {/* Label onder de FAB, op normale tab hoogte */}
+        <span style={{
+          position: "absolute", bottom: 8,
+          fontFamily: "'DM Sans', sans-serif",
+          fontSize: 10, fontWeight: active === "lola" ? 600 : 400,
+          color: active === "lola" ? COLORS.fig : COLORS.gray,
+          letterSpacing: active === "lola" ? "0.02em" : 0,
+        }}>
+          Lola
+        </span>
+      </div>
+
+      {/* Rechter tabs */}
+      <div style={{ flex: 1, display: "flex" }}>
+        {right.map(item => <TabBtn key={item.id} item={item} />)}
+      </div>
     </div>
   );
 }
