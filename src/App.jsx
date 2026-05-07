@@ -3714,13 +3714,16 @@ export default function App() {
       <style>{globalStyle}</style>
       <div style={{ width: "100%", maxWidth: 480, display: "flex", flexDirection: "column", height: "100%" }}>
 
-        {/* ── Scrollbaar content gebied ── */}
-        <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}>
-          {screen === "lola" ? (
-            // Lola chat vult de volledige scrollbare ruimte
+        {/* ── Content gebied ── */}
+        {screen === "lola" ? (
+          // Lola chat: overflow:hidden zodat LolaScreen zelf de hoogte pakt
+          // LolaScreen heeft intern flex:1 + eigen scroll op de berichtenlijst
+          <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
             <LolaScreen profile={profile} user={user} />
-          ) : (
-            // Alle andere schermen: header + content met padding
+          </div>
+        ) : (
+          // Alle andere schermen: outer scrollt, content vrij lang
+          <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}>
             <div style={{ padding: "32px 20px 32px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
                 <LolaLogo size="md" />
@@ -3732,8 +3735,8 @@ export default function App() {
               </div>
               {screenMap[screen]}
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* ── Navbar — vast onderin, nooit overlappend ── */}
         {navBar}
