@@ -3570,7 +3570,7 @@ export default function App() {
   if (phase === "auth") {
     return (
       <div style={{ minHeight: "100vh", background: COLORS.bone, fontFamily: "'DM Sans','Helvetica Neue',sans-serif" }}>
-        <style>{`* { box-sizing: border-box; margin: 0; padding: 0; } body { background: ${COLORS.bone}; overflow-x: hidden; } input, button, textarea, select { max-width: 100%; font-family: inherit; } ::-webkit-scrollbar { display: none; }`}</style>
+        <style>{`* { box-sizing: border-box; margin: 0; padding: 0; } html,body { height: 100%; overflow: hidden; } body { background: ${COLORS.bone}; } input, textarea, select { font-size: 16px !important; } input, button, textarea, select { max-width: 100%; font-family: inherit; } ::-webkit-scrollbar { display: none; }`}</style>
         <div style={{ maxWidth: 480, margin: "0 auto", width: "100%", padding: "40px 20px 60px" }}>
           <div style={{ marginBottom: 40 }}>
             <LolaLogo size="md" />
@@ -3592,7 +3592,7 @@ export default function App() {
   if (phase === "facts" || phase === "chat") {
     return (
       <>
-        <style>{`* { box-sizing: border-box; margin: 0; padding: 0; } body { background: ${COLORS.bone}; overflow-x: hidden; } input, button, textarea, select { max-width: 100%; font-family: inherit; } ::-webkit-scrollbar { display: none; } @keyframes pulse { 0%,100%{opacity:.3;transform:scale(.8)} 50%{opacity:1;transform:scale(1.1)} }`}</style>
+        <style>{`* { box-sizing: border-box; margin: 0; padding: 0; } html,body { height: 100%; overflow: hidden; } body { background: ${COLORS.bone}; } input, textarea, select { font-size: 16px !important; } input, button, textarea, select { max-width: 100%; font-family: inherit; } ::-webkit-scrollbar { display: none; } @keyframes pulse { 0%,100%{opacity:.3;transform:scale(.8)} 50%{opacity:1;transform:scale(1.1)} }`}</style>
         <div style={{ maxWidth: 480, margin: "0 auto", width: "100%", fontFamily: "'DM Sans','Helvetica Neue',sans-serif" }}>
           <OnboardingChat
             userId={user?.id}
@@ -3617,7 +3617,7 @@ export default function App() {
   if (phase === "welcome") {
     return (
       <div style={{ minHeight: "100vh", background: COLORS.bone, fontFamily: "'DM Sans','Helvetica Neue',sans-serif" }}>
-        <style>{`* { box-sizing: border-box; margin: 0; padding: 0; } body { background: ${COLORS.bone}; overflow-x: hidden; } input, button, textarea, select { max-width: 100%; font-family: inherit; } ::-webkit-scrollbar { display: none; }`}</style>
+        <style>{`* { box-sizing: border-box; margin: 0; padding: 0; } html,body { height: 100%; overflow: hidden; } body { background: ${COLORS.bone}; } input, textarea, select { font-size: 16px !important; } input, button, textarea, select { max-width: 100%; font-family: inherit; } ::-webkit-scrollbar { display: none; }`}</style>
         <style>{`
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { overflow-x: hidden; }
@@ -3687,8 +3687,12 @@ export default function App() {
 
   const globalStyle = `
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: ${COLORS.bone}; overflow: hidden; }
+    html, body { height: 100%; overflow: hidden; }
+    body { background: ${COLORS.bone}; }
+    #root { height: 100%; }
     input, button, textarea, select { max-width: 100%; font-family: inherit; }
+    /* iOS zoom-preventie: inputs < 16px laten Safari automatisch inzoomen */
+    input, textarea, select { font-size: 16px !important; }
     ::-webkit-scrollbar { display: none; }
     @keyframes pulse { 0%,100%{opacity:.3;transform:scale(.8)} 50%{opacity:1;transform:scale(1.1)} }
     @keyframes spin { to{transform:rotate(360deg)} }
