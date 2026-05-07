@@ -1506,36 +1506,14 @@ Schrijf in het Nederlands, eerste persoon (ik heb gezien...).`;
 
 // ── LOLA SCREEN ───────────────────────────────────────────
 // Navbar hoogte (px) — moet overeenkomen met de NavBar component
-// Navbar hoogte: 60px tabs + 20px padding-top + veilige safe-area marge
-const NAV_H = 90;
-
 function LolaScreen({ profile, user }) {
   const [messages,   setMessages]   = useState([]);
   const [input,      setInput]      = useState("");
   const [loading,    setLoading]    = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [ctx,        setCtx]        = useState(null);
-  const [vpHeight,   setVpHeight]   = useState(() =>
-    (window.visualViewport?.height ?? window.innerHeight)
-  );
-  const [vpOffset,   setVpOffset]   = useState(0); // vertical offset bij keyboard
   const bottomRef   = useRef(null);
   const hasScrolled = useRef(false);
-
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const onResize = () => {
-      setVpHeight(vv.height);
-      setVpOffset(vv.offsetTop ?? 0);
-    };
-    vv.addEventListener("resize", onResize);
-    vv.addEventListener("scroll", onResize);
-    return () => {
-      vv.removeEventListener("resize", onResize);
-      vv.removeEventListener("scroll", onResize);
-    };
-  }, []);
 
   useEffect(() => {
     if (messages.length === 0) return;
@@ -1690,28 +1668,8 @@ Als ze stemming/energie/slaap noemt: voeg toe [CHECKIN: energie=3, slaap=7u, ste
     return d.toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long" });
   }
 
-  // Gedeelde container stijl: position fixed, hoogte = visualViewport - navbar
-  const chatContainerStyle = {
-    position: "fixed",
-    top: vpOffset,
-    left: "50%",
-    transform: "translateX(-50%)",
-    width: "100%",
-    maxWidth: 480,
-    // Hoogte = zichtbare viewport - navbar. NAV_H (90) is navbar + safe area.
-    // Als keyboard open is: vpHeight is al kleiner, NAV_H niet aftrekken
-    // (navbar staat buiten viewport bij keyboard op iOS).
-    height: vpHeight - (vpHeight < window.innerHeight * 0.8 ? 0 : NAV_H),
-    display: "flex",
-    flexDirection: "column",
-    background: COLORS.bone,
-    zIndex: 10,
-    padding: "0 20px",
-    overflow: "hidden",
-  };
-
   if (!dataLoaded) return (
-    <div style={{ ...chatContainerStyle, alignItems: "center", justifyContent: "center", gap: 16 }}>
+    <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
       <LolaSymbol size={40} color={COLORS.fig} />
       <div style={{ fontSize: 13, color: COLORS.gray, fontFamily: "'DM Sans', sans-serif" }}>Lola leest je gegevens...</div>
     </div>
@@ -1721,7 +1679,7 @@ Als ze stemming/energie/slaap noemt: voeg toe [CHECKIN: energie=3, slaap=7u, ste
   let lastDateLabel = null;
 
   return (
-    <div style={chatContainerStyle}>
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", padding: "0 20px" }}>
 
       {/* ── Lola header ─────────────────────────────── */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 0 12px", borderBottom: `0.5px solid ${COLORS.figBorder}`, marginBottom: 12 }}>
@@ -3727,40 +3685,54 @@ export default function App() {
     : screen === "goals" ? "home"
     : "lola";
 
+  const globalStyle = `
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: ${COLORS.bone}; overflow: hidden; }
+    input, button, textarea, select { max-width: 100%; font-family: inherit; }
+    ::-webkit-scrollbar { display: none; }
+    @keyframes pulse { 0%,100%{opacity:.3;transform:scale(.8)} 50%{opacity:1;transform:scale(1.1)} }
+    @keyframes spin { to{transform:rotate(360deg)} }
+  `;
+
+  const navBar = (
+    <NavBar active={navScreen} onChange={(id) => {
+      if (id === "loggen") { setScreen("loggen"); }
+      else navigateTo(id);
+    }} />
+  );
+
+  // ── Lola screen: één vaste flexbox-kolom (chat + navbar samen)
+  // zodat de navbar altijd pal onder het invoerveld staat
+  if (screen === "lola") {
+    return (
+      <div style={{ position: "fixed", inset: 0, display: "flex", justifyContent: "center", background: COLORS.bone, fontFamily: "'DM Sans',sans-serif" }}>
+        <style>{globalStyle}</style>
+        <div style={{ width: "100%", maxWidth: 480, display: "flex", flexDirection: "column", height: "100%" }}>
+          <LolaScreen profile={profile} user={user} />
+          {navBar}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Alle andere schermen
   return (
     <div style={{ minHeight: "100dvh", background: COLORS.bone, fontFamily: "'DM Sans','Helvetica Neue',sans-serif" }}>
-      <style>{`
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: ${COLORS.bone}; overflow-x: hidden; }
-  input, button, textarea, select { max-width: 100%; font-family: inherit; }
-  ::-webkit-scrollbar { display: none; }
-  @keyframes pulse { 0%,100%{opacity:.3;transform:scale(.8)} 50%{opacity:1;transform:scale(1.1)} }
-  @keyframes spin { to{transform:rotate(360deg)} }
-`}</style>
+      <style>{globalStyle}</style>
 
-      {/* Lola chat: buiten de padded container, eigen fixed layout */}
-      {screen === "lola" && (
-        <LolaScreen profile={profile} user={user} />
-      )}
-
-      {/* Alle andere schermen: in padded container */}
-      {screen !== "lola" && (
-        <div style={{ maxWidth: 480, margin: "0 auto", width: "100%", padding: "32px 20px 100px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-            <LolaLogo size="md" />
-            {cycleDay && (
-              <div style={{ fontSize: 11, color: COLORS.gray, background: COLORS.figLight, padding: "4px 12px", borderRadius: 20, border: `0.5px solid ${COLORS.figBorder}`, fontFamily: "'DM Sans', sans-serif" }}>
-                Dag {cycleDay}
-              </div>
-            )}
-          </div>
-          {screenMap[screen]}
+      {/* Andere schermen: in padded container */}
+      <div style={{ maxWidth: 480, margin: "0 auto", width: "100%", padding: "32px 20px 100px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+          <LolaLogo size="md" />
+          {cycleDay && (
+            <div style={{ fontSize: 11, color: COLORS.gray, background: COLORS.figLight, padding: "4px 12px", borderRadius: 20, border: `0.5px solid ${COLORS.figBorder}`, fontFamily: "'DM Sans', sans-serif" }}>
+              Dag {cycleDay}
+            </div>
+          )}
         </div>
-      )}
-      <NavBar active={navScreen} onChange={(id) => {
-        if (id === "loggen") { setScreen("loggen"); }
-        else navigateTo(id);
-      }} />
+        {screenMap[screen]}
+      </div>
+      {navBar}
     </div>
   );
 }
