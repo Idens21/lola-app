@@ -604,9 +604,27 @@ Max 400 woorden. Geen kopjes, doorlopende tekst. Niet eindigen met een vraag.`;
 
         const portrait = await askLola(allApiMessages, portraitPrompt);
 
-        // Sla portret op
+        // Sla portret op in profiles
         if (userId) {
           await supabase.from("profiles").update({ personality_profile: portrait }).eq("id", userId);
+
+          // Seed lola_memory met kernobservaties uit het gesprek
+          // zodat Lola direct iets heeft om op terug te vallen
+          const seedPrompt = `Op basis van dit intakegesprek, schrijf 3 tot 5 beknopte observaties over deze persoon.
+Elke observatie is één zin, in de derde persoon, concreet en persoonlijk.
+Schrijf ze als een lijst, één per regel, zonder nummering of bullets.
+Geen herhaling van feitjes als naam of leeftijd — alleen echte inzichten.`;
+
+          const seedRaw = await askLola(allApiMessages, seedPrompt);
+          const seedLines = seedRaw.split("\n").map(s => s.trim()).filter(s => s.length > 20 && s.length < 300);
+
+          for (const line of seedLines.slice(0, 5)) {
+            await supabase.from("lola_memory").insert({
+              user_id: userId,
+              content: line,
+              source: "intake",
+            });
+          }
         }
 
         onDone({ facts: allFacts, personality_profile: portrait });
@@ -1488,7 +1506,8 @@ Schrijf in het Nederlands, eerste persoon (ik heb gezien...).`;
 
 // ── LOLA SCREEN ───────────────────────────────────────────
 // Navbar hoogte (px) — moet overeenkomen met de NavBar component
-const NAV_H = 64;
+// Navbar hoogte: 60px tabs + 20px padding-top + veilige safe-area marge
+const NAV_H = 90;
 
 function LolaScreen({ profile, user }) {
   const [messages,   setMessages]   = useState([]);
@@ -1496,20 +1515,26 @@ function LolaScreen({ profile, user }) {
   const [loading,    setLoading]    = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [ctx,        setCtx]        = useState(null);
-  // Keyboard-aware hoogte via visualViewport
   const [vpHeight,   setVpHeight]   = useState(() =>
     (window.visualViewport?.height ?? window.innerHeight)
   );
+  const [vpOffset,   setVpOffset]   = useState(0); // vertical offset bij keyboard
   const bottomRef   = useRef(null);
   const hasScrolled = useRef(false);
 
-  // Luister naar visualViewport resize (keyboard open/dicht op iOS/Android)
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
-    const onResize = () => setVpHeight(vv.height);
+    const onResize = () => {
+      setVpHeight(vv.height);
+      setVpOffset(vv.offsetTop ?? 0);
+    };
     vv.addEventListener("resize", onResize);
-    return () => vv.removeEventListener("resize", onResize);
+    vv.addEventListener("scroll", onResize);
+    return () => {
+      vv.removeEventListener("resize", onResize);
+      vv.removeEventListener("scroll", onResize);
+    };
   }, []);
 
   useEffect(() => {
@@ -1654,12 +1679,15 @@ ${!patterns ? "Onvoldoende data." : `Gem. energie 7 dagen: ${patterns.recentAvgE
   // Gedeelde container stijl: position fixed, hoogte = visualViewport - navbar
   const chatContainerStyle = {
     position: "fixed",
-    top: 0,
+    top: vpOffset,
     left: "50%",
     transform: "translateX(-50%)",
     width: "100%",
     maxWidth: 480,
-    height: vpHeight - NAV_H,
+    // Hoogte = zichtbare viewport - navbar. NAV_H (90) is navbar + safe area.
+    // Als keyboard open is: vpHeight is al kleiner, NAV_H niet aftrekken
+    // (navbar staat buiten viewport bij keyboard op iOS).
+    height: vpHeight - (vpHeight < window.innerHeight * 0.8 ? 0 : NAV_H),
     display: "flex",
     flexDirection: "column",
     background: COLORS.bone,
