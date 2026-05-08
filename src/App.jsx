@@ -1403,14 +1403,22 @@ async function handleLolaResponse(rawReply, userId) {
   // 1. [ONTHOUD: ...] — sla op in lola_memory, strip uit zichtbare tekst
   const onthoudRegex = /\[ONTHOUD:\s*([\s\S]*?)\]/g;
   const onthoudMatches = [...rawReply.matchAll(onthoudRegex)];
+  console.log(`[Lola] Ruwe reply (${rawReply.length} tekens), ${onthoudMatches.length} ONTHOUD tag(s) gevonden`);
+
   for (const match of onthoudMatches) {
     const content = match[1].trim();
+    console.log(`[Lola] ONTHOUD opslaan:`, content);
     if (content) {
-      await supabase.from("lola_memory").insert({
+      // Probeer eerst met created_by kolom, dan zonder (kolom bestaat mogelijk niet)
+      const { error } = await supabase.from("lola_memory").insert({
         user_id: userId,
         content,
-        source: "lola",
       });
+      if (error) {
+        console.error(`[Lola] lola_memory insert mislukt:`, error.message, error.details);
+      } else {
+        console.log(`[Lola] ✓ Herinnering opgeslagen`);
+      }
     }
   }
   visible = visible.replace(onthoudRegex, "").trim();
@@ -1680,14 +1688,28 @@ ${summaryBlock ? `── WEKELIJKSE OBSERVATIES ──\n${summaryBlock}\n` : ""}
 Gem. energie: ${patterns.recentAvgEnergy}/5 · Lage energie cyclusdagen: ${patterns.lowEnergyDays.join(", ") || "geen"}
 ${patterns.fatCorr || ""} ${patterns.proteinCorr || ""}
 ` : ""}
-── INSTRUCTIES ──
-[ONTHOUD: ...] VERPLICHT bij: hoe ze zich voelt, events, beslissingen, patronen, zorgen, wat ze wil.
-Schrijf in derde persoon met datum: [ONTHOUD: Iris voelt zich op ${today} niet goed en heeft hoofdpijn.]
-Meerdere tags per bericht is prima. Onzichtbaar voor haar.
+── GEHEUGEN (VERPLICHT) ──
+Sluit elk antwoord af met één of meer geheugenregels in dit exacte formaat:
+[ONTHOUD: <observatie in derde persoon, met datum>]
 
-[CHECKIN: energie=3, slaap=7u, stemming=2] als ze dat noemt in de chat.
+Gebruik dit ALTIJD als zij iets deelt over:
+- hoe ze zich voelt (energie, stemming, pijn, vreugde)
+- events of ervaringen (gesprek, beslissing, conflict, succes)
+- zorgen, spanningen, wensen of patronen
 
-Stijl: één vraag per bericht · warm, eerlijk, concreet · max 4 zinnen · Nederlands.`;
+Voorbeelden:
+[ONTHOUD: Iris voelt zich op ${today} moe en heeft hoofdpijn.]
+[ONTHOUD: Iris heeft op ${today} een moeilijk gesprek gehad met haar partner.]
+[ONTHOUD: Iris wil meer rust inbouwen in haar werkweek.]
+
+Als er niets noemenswaardigs is, schrijf dan: [ONTHOUD: Geen bijzonderheden op ${today}.]
+Deze regels zijn volledig onzichtbaar voor haar — ze worden automatisch verwijderd.
+
+── CHECK-IN ──
+[CHECKIN: energie=3, slaap=7u, stemming=2] als ze stemming/energie/slaap noemt.
+
+── STIJL ──
+Eén vraag per bericht · warm, eerlijk, concreet · max 4 zinnen · Nederlands.`;
   }
 
   async function send() {
