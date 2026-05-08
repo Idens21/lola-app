@@ -1553,27 +1553,101 @@ function LolaScreen({ profile, user }) {
     const context = ctx || {};
     const MOODS   = ["Zwaar", "Moeizaam", "Oké", "Fris", "Uitgerust"];
 
-    const todayOchtend = context.todayCheckins?.find(c => c.type === "ochtend");
-    const todayAvond   = context.todayCheckins?.find(c => c.type === "avond");
+    // Datum en tijd — expliciet voor tijdsbesef
+    const now       = new Date();
+    const todayStr  = now.toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+    const timeStr   = now.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" });
+    const today     = now.toISOString().slice(0, 10);
+
+    // Vandaag — check-ins met tijdstip
+    const todayOchtend = (context.todayCheckins || []).find(c => c.type === "ochtend");
+    const todayAvond   = (context.todayCheckins || []).find(c => c.type === "avond");
+
+    function fmtOchtend(c) {
+      if (!c) return "Niet ingevuld";
+      const tijd = c.created_at ? new Date(c.created_at).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" }) : "";
+      const stemming = c.wake_mood != null ? MOODS[c.wake_mood] : null;
+      const parts = [
+        stemming && `stemming: ${stemming}`,
+        c.energy != null && `energie: ${c.energy}/5`,
+        c.slept && `slaap: ${c.slept}`,
+        c.weight && `gewicht: ${c.weight}kg`,
+      ].filter(Boolean).join(" | ");
+      return `${tijd ? `(${tijd}) ` : ""}${parts || "ingevuld"}${c.intention ? `\n  intentie: "${c.intention}"` : ""}${c.note ? `\n  notitie: "${c.note}"` : ""}`;
+    }
+
+    function fmtAvond(c) {
+      if (!c) return "Niet ingevuld";
+      const tijd = c.created_at ? new Date(c.created_at).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" }) : "";
+      const parts = [
+        c.day_rating != null && `dag: ${c.day_rating}/5`,
+        c.moved != null && `bewogen: ${c.moved ? "ja" : "nee"}`,
+        c.moved && c.movement_note && `(${c.movement_note})`,
+      ].filter(Boolean).join(" | ");
+      return `${tijd ? `(${tijd}) ` : ""}${parts || "ingevuld"}${c.gratitude ? `\n  dankbaar: "${c.gratitude}"` : ""}${c.release ? `\n  losgelaten: "${c.release}"` : ""}`;
+    }
+
+    // Voeding vandaag
     const totalKcal    = (context.todayFood || []).reduce((s, f) => s + (f.kcal    || 0), 0);
     const totalProtein = (context.todayFood || []).reduce((s, f) => s + (f.protein || 0), 0);
     const totalFat     = (context.todayFood || []).reduce((s, f) => s + (f.fat     || 0), 0);
-    const patterns     = analyzePatterns(context.recentCheckins || [], context.allFood || [], facts.lastperiod, facts.cyclelength);
+    const maaltijden   = ["ontbijt","lunch","diner","snack"].map(meal => {
+      const items = (context.todayFood || []).filter(f => f.meal === meal);
+      if (!items.length) return null;
+      return `${meal}: ${items.map(f => `${f.product_name} (${f.kcal}kcal)`).join(", ")}`;
+    }).filter(Boolean).join("\n  ");
 
+    // Afgelopen 7 dagen check-ins (voor tijdsbesef en trend)
+    const recentDays = (() => {
+      const byDate = {};
+      for (const c of (context.recentCheckins || [])) {
+        const d = c.created_at?.slice(0, 10);
+        if (!d) continue;
+        if (!byDate[d]) byDate[d] = {};
+        if (c.type === "avond") byDate[d].avond = c;
+        else byDate[d].ochtend = c;
+      }
+      return Object.entries(byDate)
+        .sort((a, b) => b[0].localeCompare(a[0]))
+        .slice(0, 7)
+        .map(([date, { ochtend, avond }]) => {
+          const label = date === today ? "vandaag" :
+            date === new Date(Date.now() - 86400000).toISOString().slice(0, 10) ? "gisteren" :
+            new Date(date).toLocaleDateString("nl-NL", { weekday: "short", day: "numeric", month: "short" });
+          const o = ochtend ? `energie ${ochtend.energy ?? "?"}/5, slaap ${ochtend.slept ?? "?"}${ochtend.wake_mood != null ? `, stemming ${MOODS[ochtend.wake_mood]}` : ""}` : "geen ochtend";
+          const a = avond ? `dag ${avond.day_rating ?? "?"}/5${avond.moved != null ? `, bewogen: ${avond.moved ? "ja" : "nee"}` : ""}` : "";
+          return `  ${label}: ${o}${a ? ` | avond: ${a}` : ""}`;
+        }).join("\n");
+    })();
+
+    // Patronen
+    const patterns = analyzePatterns(context.recentCheckins || [], context.allFood || [], facts.lastperiod, facts.cyclelength);
+
+    // Geheugen
     const memoryBlock = (context.recentMemory || []).length > 0
-      ? (context.recentMemory || []).map(m => `• ${m.content}`).join("\n")
-      : "Nog geen herinneringen opgeslagen.";
+      ? (context.recentMemory || [])
+          .map(m => {
+            const ago = m.created_at ? (() => {
+              const d = Math.floor((Date.now() - new Date(m.created_at)) / 86400000);
+              return d === 0 ? "vandaag" : d === 1 ? "gisteren" : `${d} dagen geleden`;
+            })() : "";
+            return `• ${m.content}${ago ? ` (${ago})` : ""}`;
+          })
+          .join("\n")
+      : "Nog geen herinneringen.";
 
     const summaryBlock = (context.weeklySummaries || []).length > 0
-      ? (context.weeklySummaries || []).slice(0, 2).map(s => `Week van ${s.week_start}:\n${s.summary}`).join("\n\n")
+      ? (context.weeklySummaries || []).slice(0, 2)
+          .map(s => `Week van ${s.week_start}:\n${s.summary}`)
+          .join("\n\n")
       : null;
 
     return `Je bent Lola — een warme maar eerlijke persoonlijke coach voor vrouwen.
+Je werkt vanuit drie modi: 🪞 Getuige · 🔁 Spiegel · 🧭 Gids
 
-Je werkt vanuit drie modi, die je vloeiend afwisselt:
-🪞 Getuige — je benoemt wat je waarneemt zonder oordeel
-🔁 Spiegel — je spiegelt haar eigen woorden en patronen terug
-🧭 Gids — je geeft concrete, passende richting
+── TIJD EN DATUM ──
+Nu: ${todayStr}, ${timeStr}
+Gebruik dit actief. Als ze over "vandaag", "gisteren" of "deze week" praat, weet jij de exacte datum en context.
 
 ── WIE ZE IS ──
 ${facts.personality_profile || `${facts.name || "onbekend"} · ${facts.hdtype || "?"} · ${getZodiac(facts.birthdate) || "?"}`}
@@ -1584,49 +1658,36 @@ Werk: ${facts.work || "?"} · Relatie: ${facts.relationship_status || "?"} · Ki
 Human Design: ${facts.hdtype || "?"} · Profiel ${facts.hdprofile || "?"} · Autoriteit ${facts.hdauthority || "?"}
 
 ── CYCLUS ──
-${phase.name}${cycleDay ? ` · dag ${cycleDay}` : ""} (cycluslengte: ${facts.cyclelength || "?"})
+${phase.name}${cycleDay ? ` · dag ${cycleDay}` : ""} · cycluslengte ${facts.cyclelength || "?"}
+Fase: ${phase.tip}
 
-── CHECK-IN VANDAAG ──
-${todayOchtend
-  ? `Ochtend — stemming: ${MOODS[todayOchtend.wake_mood] ?? "?"} | energie: ${todayOchtend.energy ?? "?"}/5 | slaap: ${todayOchtend.slept ?? "?"}`
-    + (todayOchtend.intention ? ` | intentie: "${todayOchtend.intention}"` : "")
-  : "Geen ochtend check-in."}
-${todayAvond
-  ? `Avond — dag: ${todayAvond.day_rating ?? "?"}/5 | bewogen: ${todayAvond.moved ? "ja" : "nee"}`
-    + (todayAvond.gratitude ? ` | dankbaar: "${todayAvond.gratitude}"` : "")
-  : ""}
+── CHECK-IN VANDAAG (${todayStr}) ──
+Ochtend: ${fmtOchtend(todayOchtend)}
+Avond:   ${fmtAvond(todayAvond)}
 
 ── VOEDING VANDAAG ──
-${(context.todayFood || []).length > 0 ? `${totalKcal} kcal · ${totalProtein}g eiwit · ${totalFat}g vet` : "Nog niets gelogd."}
+${(context.todayFood || []).length > 0
+  ? `Totaal: ${totalKcal} kcal · ${totalProtein}g eiwit · ${totalFat}g vet\n  ${maaltijden}`
+  : "Nog niets gelogd."}
+
+── AFGELOPEN 7 DAGEN ──
+${recentDays || "Geen data beschikbaar."}
 
 ── LOLA'S GEHEUGEN ──
-Dit heeft Lola over haar onthouden:
 ${memoryBlock}
 
-${summaryBlock ? `── WEKELIJKSE OBSERVATIES ──\n${summaryBlock}\n` : ""}
-── PATRONEN ──
-${!patterns ? "Onvoldoende data." : `Gem. energie 7 dagen: ${patterns.recentAvgEnergy}/5 · Lage energie cyclusdagen: ${patterns.lowEnergyDays.join(", ") || "geen"} · ${patterns.fatCorr || ""} ${patterns.proteinCorr || ""}`}
+${summaryBlock ? `── WEKELIJKSE OBSERVATIES ──\n${summaryBlock}\n` : ""}${patterns ? `── PATRONEN ──
+Gem. energie: ${patterns.recentAvgEnergy}/5 · Lage energie cyclusdagen: ${patterns.lowEnergyDays.join(", ") || "geen"}
+${patterns.fatCorr || ""} ${patterns.proteinCorr || ""}
+` : ""}
+── INSTRUCTIES ──
+[ONTHOUD: ...] VERPLICHT bij: hoe ze zich voelt, events, beslissingen, patronen, zorgen, wat ze wil.
+Schrijf in derde persoon met datum: [ONTHOUD: Iris voelt zich op ${today} niet goed en heeft hoofdpijn.]
+Meerdere tags per bericht is prima. Onzichtbaar voor haar.
 
-── GEHEUGEN — GEBRUIK [ONTHOUD:] ACTIEF ──
-Voeg aan elk antwoord een [ONTHOUD: ...] tag toe wanneer zij iets zegt dat de moeite waard is om te onthouden. Dit is VERPLICHT bij:
-- Hoe ze zich voelt: "ik voel me niet goed", "ik ben moe", "ik ben blij vandaag"
-- Belangrijke events: een gesprek met iemand, een beslissing, een conflict, een mijlpaal
-- Patronen die ze zelf benoemt: "ik doe dit altijd", "ik herken dit"
-- Zorgen of spanningen: werk, relatie, lichaam, geld, familie
-- Wat ze wil of nodig heeft: "ik wil meer rust", "ik wil stoppen met..."
-- Alles wat jij als coach waardevol vindt om bij de volgende sessie te weten
+[CHECKIN: energie=3, slaap=7u, stemming=2] als ze dat noemt in de chat.
 
-Formaat: [ONTHOUD: Iris voelt zich vandaag niet goed en heeft hoofdpijn.]
-Schrijf in derde persoon, kort en concreet. Meerdere tags per bericht is prima.
-Deze tags zijn onzichtbaar voor haar en worden automatisch opgeslagen.
-
-── CHECK-IN VIA CHAT ──
-Als ze stemming/energie/slaap noemt: voeg toe [CHECKIN: energie=3, slaap=7u, stemming=2]
-
-── STIJL ──
-- Bouw voort op alles wat je weet en hebt onthouden
-- Eén vraag per bericht. Warm, eerlijk, concreet. Nederlands.
-- Schrijf kort — max 4 zinnen tenzij ze uitleg vraagt`;
+Stijl: één vraag per bericht · warm, eerlijk, concreet · max 4 zinnen · Nederlands.`;
   }
 
   async function send() {
